@@ -1109,22 +1109,26 @@
                 const worldPos = screenToWorld(touchPos.x, touchPos.y);
                 const targetPerson = getPersonAt(worldPos.x, worldPos.y);
 
-                if (targetPerson && currentAction === 'select') {
-                    // Iniciar temporizador para "mantener presionado"
-                    longPressTimeout = setTimeout(() => {
-                        isTouchDragging = true;
-                        isPanning = false; // Asegurarse de no hacer pan
-                        if (!multiSelection.includes(targetPerson)) {
-                            multiSelection = [targetPerson];
-                        }
-                        dragOffsetX = worldPos.x;
-                        dragOffsetY = worldPos.y;
-                        showToast('Arrastrando miembro...');
-                        draw();
-                    }, 500); // 500ms para mantener presionado
-                } else {
-                     isPanning = true;
+                if (currentAction === 'select') {
+                    if (targetPerson) {
+                        // Iniciar temporizador para "mantener presionado" para arrastrar
+                        longPressTimeout = setTimeout(() => {
+                            isTouchDragging = true;
+                            isPanning = false; // Asegurarse de no hacer pan
+                            if (!multiSelection.includes(targetPerson)) {
+                                multiSelection = [targetPerson];
+                            }
+                            dragOffsetX = worldPos.x;
+                            dragOffsetY = worldPos.y;
+                            showToast('Arrastrando miembro...');
+                            draw();
+                        }, 500); // 500ms para mantener presionado
+                    } else {
+                        // Si no se toca a una persona en modo selección, es para mover el lienzo
+                        isPanning = true;
+                    }
                 }
+                // Si la acción es añadir, no hacemos nada en touchstart, esperamos a touchend para registrar el "tap"
 
             } else if (e.touches.length === 2) {
                 isPanning = false;
@@ -1178,7 +1182,7 @@
             e.preventDefault();
             clearTimeout(longPressTimeout);
             
-            // Si no hubo movimiento, es un toque (tap)
+            // Si no hubo movimiento significativo (es un toque/tap)
             if (!isPanning && !isTouchDragging && e.changedTouches.length === 1) {
                  const touchPos = getTouchPos(e.changedTouches[0]);
                  handlePointerDown(screenToWorld(touchPos.x, touchPos.y), false); // Shift=false para toques
