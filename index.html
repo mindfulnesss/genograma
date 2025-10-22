@@ -1,0 +1,1488 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genograma Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+        }
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        canvas {
+            /* background-color: #f9fafb; */ /* Eliminado para que se dibuje en el canvas */
+            cursor: default;
+            display: block;
+        }
+        .tool-button {
+            transition: all 0.2s ease-in-out;
+        }
+        .tool-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .tool-button.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        .toast {
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s, bottom 0.3s;
+        }
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 30px;
+        }
+        .property-section {
+            display: none;
+        }
+        .property-section.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex h-screen">
+
+    <!-- Panel de Herramientas Izquierdo --><aside class="w-80 bg-white shadow-lg p-6 flex flex-col space-y-6 overflow-y-auto">
+        <div class="flex items-center space-x-3">
+            <svg class="h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+            </svg>
+            <h1 class="text-2xl font-bold text-gray-800">Genograma Pro</h1>
+        </div>
+
+        <div class="border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4">Archivo</h2>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="undoBtn" class="tool-button w-full p-2 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2" disabled><span>Deshacer</span></button>
+                <button id="redoBtn" class="tool-button w-full p-2 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2" disabled><span>Rehacer</span></button>
+            </div>
+            <div class="space-y-3 mt-3">
+                <button id="saveBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2"><span>Guardar Progreso</span></button>
+                <button id="importBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2"><span>Importar Progreso</span></button>
+                <input type="file" id="importFile" class="hidden" accept=".json">
+                <button id="exportPngBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2"><span>Exportar a PNG</span></button>
+                <button id="exportPdfBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2"><span>Exportar a PDF</span></button>
+            </div>
+        </div>
+        
+        <div class="border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4">Añadir Miembro</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <button id="addMaleBtn" class="tool-button flex flex-col items-center p-3 border rounded-lg hover:bg-gray-100">
+                    <div class="w-8 h-8 border-2 border-gray-700 bg-white rounded-sm"></div>
+                    <span class="mt-2 text-sm">Hombre</span>
+                </button>
+                <button id="addFemaleBtn" class="tool-button flex flex-col items-center p-3 border rounded-lg hover:bg-gray-100">
+                    <div class="w-8 h-8 border-2 border-gray-700 bg-white rounded-full"></div>
+                    <span class="mt-2 text-sm">Mujer</span>
+                </button>
+                <button id="addPetBtn" class="tool-button flex flex-col items-center p-3 border rounded-lg hover:bg-gray-100">
+                    <svg width="32" height="32" viewBox="0 0 40 40"><path d="M20 2 L38 20 L20 38 L2 20 Z" stroke-width="2" stroke="#4b5563" fill="white"></path></svg>
+                    <span class="mt-2 text-sm">Mascota</span>
+                </button>
+                <button id="addLossBtn" class="tool-button flex flex-col items-center p-3 border rounded-lg hover:bg-gray-100">
+                    <svg width="32" height="32" viewBox="0 0 40 40"><circle cx="20" cy="20" r="10" stroke-width="2" stroke="#4b5563" fill="black"></circle></svg>
+                    <span class="mt-2 text-sm">Pérdida</span>
+                </button>
+                 <button id="addAbortionBtn" class="tool-button flex flex-col items-center p-3 border rounded-lg hover:bg-gray-100">
+                    <svg width="32" height="32" viewBox="0 0 40 40"><path d="M 15 15 L 25 25 M 25 15 L 15 25" stroke-width="3" stroke="#4b5563"></path></svg>
+                    <span class="mt-2 text-sm">Aborto</span>
+                </button>
+                <button id="addPregnancyBtn" class="tool-button flex flex-col items-center p-3 border rounded-lg hover:bg-gray-100">
+                    <svg width="32" height="32" viewBox="0 0 40 40"><path d="M20 5 L35 35 L5 35 Z" stroke-width="2" stroke="#4b5563" fill="white"></path></svg>
+                    <span class="mt-2 text-sm">Embarazo</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4">Vínculos</h2>
+            <div class="space-y-3">
+                 <button id="addParentalLinkBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"></path>
+                    </svg>
+                    <span>Crear Vínculo de Pareja</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4">Relaciones y Acciones</h2>
+            <div class="space-y-3">
+                 <button id="addHumanRelationBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Definir Relación</span>
+                </button>
+                <button id="addChildBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72"></path>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72"></path>
+                    </svg>
+                    <span>Vincular como Hijo/a</span>
+                </button>
+                <button id="addIdenticalTwinsBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    <span>Marcar Gemelos</span>
+                </button>
+                <button id="addFraternalTwinsBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                    <span>Marcar Mellizos</span>
+                </button>
+                <button id="addCohabitationBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                         <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    <span>Marcar Cohabitación</span>
+                </button>
+                 <button id="markIndexPatientBtn" class="tool-button w-full p-3 border rounded-lg hover:bg-gray-100 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>
+                    </svg>
+                    <span>Paciente Índice</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Properties Panel --><div id="propertiesPanel" class="border-t pt-6 space-y-4">
+            <h2 class="text-lg font-semibold">Propiedades</h2>
+            <div id="personProperties" class="property-section space-y-4">
+                <div>
+                    <label for="nameInput" class="block text-sm font-medium text-gray-700">Nombre</label>
+                    <input type="text" id="nameInput" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                 <div>
+                    <label for="birthDateInput" class="block text-sm font-medium text-gray-700">Año Nacimiento</label>
+                    <input type="text" id="birthDateInput" placeholder="Ej: 1980" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                 <div>
+                    <label for="deathDateInput" class="block text-sm font-medium text-gray-700">Año Fallecimiento</label>
+                    <input type="text" id="deathDateInput" placeholder="Ej: 2020" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label for="ageInput" class="block text-sm font-medium text-gray-700">Edad</label>
+                    <input type="text" id="ageInput" placeholder="Ej: 42" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="flex items-center">
+                    <input id="isAdopted" name="isAdopted" type="checkbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="isAdopted" class="ml-2 block text-sm text-gray-900">Es Adoptado</label>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Condiciones de Salud</label>
+                    <div id="illnessCheckboxes" class="mt-2 grid grid-cols-2 gap-x-4 gap-y-2"></div>
+                </div>
+                <button id="deletePersonBtn" class="w-full bg-red-500 text-white p-2 rounded-lg hover:bg-red-600">Eliminar Miembro</button>
+            </div>
+            <div id="parentalLinkProperties" class="property-section space-y-4">
+                 <div>
+                    <label for="parentalStatusSelect" class="block text-sm font-medium text-gray-700">Estado Civil</label>
+                    <select id="parentalStatusSelect" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="married">Casados</option>
+                        <option value="unmarried">No casados</option>
+                        <option value="separated">Separados</option>
+                        <option value="divorced">Divorciados</option>
+                    </select>
+                </div>
+                 <button id="deleteParentalLinkBtn" class="w-full bg-red-500 text-white p-2 rounded-lg hover:bg-red-600">Eliminar Vínculo</button>
+            </div>
+             <div id="humanRelationProperties" class="property-section space-y-4">
+                 <div>
+                    <label for="humanRelationSelect" class="block text-sm font-medium text-gray-700">Tipo de Relación</label>
+                    <select id="humanRelationSelect" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="cercana">Cercana</option>
+                        <option value="estrecha">Estrecha</option>
+                        <option value="conflictiva">Conflictiva</option>
+                        <option value="abuso">Abuso</option>
+                        <option value="distante">Distante</option>
+                        <option value="rota">Rota</option>
+                    </select>
+                </div>
+                 <button id="deleteHumanRelationBtn" class="w-full bg-red-500 text-white p-2 rounded-lg hover:bg-red-600">Eliminar Relación</button>
+            </div>
+             <div id="cohabitationProperties" class="property-section space-y-4">
+                <p class="text-sm text-gray-700">Área de cohabitación seleccionada.</p>
+                <button id="deleteCohabitationBtn" class="w-full bg-red-500 text-white p-2 rounded-lg hover:bg-red-600">Eliminar Área</button>
+            </div>
+             <div id="noSelection" class="text-sm text-gray-500 text-center pt-4">
+                <p>Selecciona un miembro o un vínculo para ver sus propiedades.</p>
+            </div>
+        </div>
+
+        <div class="border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4">Leyenda de Patologías</h2>
+            <div id="illnessLegend" class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"></div>
+        </div>
+
+        <div class="border-t pt-6">
+            <h2 class="text-lg font-semibold mb-4">Leyenda de Símbolos</h2>
+            <div id="symbolLegend" class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm"></div>
+        </div>
+
+         <div class="flex-grow"></div>
+         <div class="text-xs text-gray-400 text-center">
+            <p>Rueda del mouse: Zoom. Clic derecho: Mover lienzo.</p>
+        </div>
+    </aside>
+
+    
+
+<main class="flex-1 bg-gray-200 canvas-container">
+        <canvas id="genogramCanvas"></canvas>
+    </main>
+
+    
+
+<div id="toast" class="toast fixed bottom-0 left-1/2 -translate-x-1/2 bg-gray-800 text-white py-2 px-5 rounded-full shadow-lg"></div>
+
+    <script>
+        const canvas = document.getElementById('genogramCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = canvas.parentElement;
+
+        // --- UI Elements ---
+        const addMaleBtn = document.getElementById('addMaleBtn'), addFemaleBtn = document.getElementById('addFemaleBtn'),
+              addPetBtn = document.getElementById('addPetBtn'), addLossBtn = document.getElementById('addLossBtn'),
+              addAbortionBtn = document.getElementById('addAbortionBtn'), addPregnancyBtn = document.getElementById('addPregnancyBtn'),
+              addParentalLinkBtn = document.getElementById('addParentalLinkBtn'), addHumanRelationBtn = document.getElementById('addHumanRelationBtn'),
+              addChildBtn = document.getElementById('addChildBtn'),
+              addIdenticalTwinsBtn = document.getElementById('addIdenticalTwinsBtn'), addFraternalTwinsBtn = document.getElementById('addFraternalTwinsBtn'), 
+              addCohabitationBtn = document.getElementById('addCohabitationBtn'),
+              markIndexPatientBtn = document.getElementById('markIndexPatientBtn'),
+              undoBtn = document.getElementById('undoBtn'), redoBtn = document.getElementById('redoBtn'),
+              propertiesPanel = document.getElementById('propertiesPanel'), personProperties = document.getElementById('personProperties'),
+              parentalLinkProperties = document.getElementById('parentalLinkProperties'), humanRelationProperties = document.getElementById('humanRelationProperties'), cohabitationProperties = document.getElementById('cohabitationProperties'),
+              noSelection = document.getElementById('noSelection'),
+              nameInput = document.getElementById('nameInput'), birthDateInput = document.getElementById('birthDateInput'),
+              deathDateInput = document.getElementById('deathDateInput'), ageInput = document.getElementById('ageInput'), isAdoptedCheckbox = document.getElementById('isAdopted'), illnessCheckboxesContainer = document.getElementById('illnessCheckboxes'),
+              deletePersonBtn = document.getElementById('deletePersonBtn'), parentalStatusSelect = document.getElementById('parentalStatusSelect'),
+              humanRelationSelect = document.getElementById('humanRelationSelect'),
+              deleteParentalLinkBtn = document.getElementById('deleteParentalLinkBtn'), deleteHumanRelationBtn = document.getElementById('deleteHumanRelationBtn'), deleteCohabitationBtn = document.getElementById('deleteCohabitationBtn'), toast = document.getElementById('toast'),
+              saveBtn = document.getElementById('saveBtn'), importBtn = document.getElementById('importBtn'),
+              importFile = document.getElementById('importFile'), exportPngBtn = document.getElementById('exportPngBtn'),
+              exportPdfBtn = document.getElementById('exportPdfBtn'),
+              illnessLegend = document.getElementById('illnessLegend'),
+              symbolLegend = document.getElementById('symbolLegend');
+
+        // --- App State ---
+        let people = [], relationships = [], humanRelations = [], cohabitations = [], nextId = 1, currentAction = 'select', 
+            multiSelection = [], selectedRelationship = null, selectedHumanRelation = null, selectedCohabitation = null, selectionBuffer = [], 
+            isDragging = false, dragOffsetX, dragOffsetY,
+            isPanning = false, panStartX, panStartY,
+            isSelecting = false, selectionRect = {x:0, y:0, w:0, h:0},
+            twinMarkingType = 'identical';
+        
+        let historyStack = [], redoStack = [];
+        
+        // --- Viewport State (Pan & Zoom) ---
+        let scale = 1, panX = 0, panY = 0;
+
+        // --- Constants ---
+        const NODE_SIZE = 60, FONT_SIZE = 14;
+        const LINE_SPACING_VERTICAL = 35; 
+        const ILLNESSES = {
+            diabetes: { label: 'Diabetes', color: '#ef4444' }, schizophrenia: { label: 'Esquizofrenia', color: '#8b5cf6' },
+            hypertension: { label: 'Hipertensión', color: '#f97316' }, depression: { label: 'Depresión', color: '#3b82f6' },
+            cancer: { label: 'Cáncer', color: '#10b981' }, alzheimer: { label: 'Alzheimer', color: '#64748b' },
+            addiction: { label: 'Adicciones', color: '#f59e0b' }, heart_disease: { label: 'Cardiopatía', color: '#be123c' },
+            bipolarity: { label: 'Bipolaridad', color: '#84cc16' }, tea: { label: 'TEA', color: '#d946ef' },
+        };
+
+        // --- UI Setup ---
+        function setupIllnessCheckboxes() {
+            illnessCheckboxesContainer.innerHTML = Object.keys(ILLNESSES).map(key => `
+                <div class="flex items-center">
+                    <input id="illness-${key}" name="illness" type="checkbox" data-illness="${key}" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    <label for="illness-${key}" class="ml-2 block text-sm text-gray-900">${ILLNESSES[key].label}</label>
+                </div>`).join('');
+        }
+
+        function setupIllnessLegend() {
+            illnessLegend.innerHTML = Object.keys(ILLNESSES).map(key => `
+                <div class="flex items-center">
+                    <span class="h-4 w-4 inline-block rounded-sm mr-2" style="background-color: ${ILLNESSES[key].color};"></span>
+                    <span>${ILLNESSES[key].label}</span>
+                </div>
+            `).join('');
+        }
+
+        function setupSymbolLegend() {
+            symbolLegend.innerHTML = `
+                <div class="flex items-center"><div class="w-5 h-5 border-2 border-gray-700 bg-white rounded-sm mr-2"></div><span>Hombre</span></div>
+                <div class="flex items-center"><div class="w-5 h-5 border-2 border-gray-700 bg-white rounded-full mr-2"></div><span>Mujer</span></div>
+                <div class="flex items-center"><svg width="20" height="20" viewBox="0 0 20 20" class="mr-2"><path d="M10 1 L19 10 L10 19 L1 10 Z" stroke-width="2" stroke="#4b5563" fill="white"></path></svg><span>Mascota</span></div>
+                <div class="flex items-center"><svg width="20" height="20" viewBox="0 0 20 20" class="mr-2"><circle cx="10" cy="10" r="5" stroke-width="2" stroke="#4b5563" fill="black"></circle></svg><span>Pérdida</span></div>
+                <div class="flex items-center"><svg width="20" height="20" viewBox="0 0 20 20" class="mr-2"><path d="M 7 7 L 13 13 M 13 7 L 7 13" stroke-width="2.5" stroke="#4b5563"></path></svg><span>Aborto</span></div>
+                <div class="flex items-center"><svg width="20" height="20" viewBox="0 0 20 20" class="mr-2"><path d="M10 2 L18 18 L2 18 Z" stroke-width="2" stroke="#4b5563" fill="white"></path></svg><span>Embarazo</span></div>
+            `;
+        }
+        
+        // --- Utility & Coordinate Transformation ---
+        function resizeCanvas() { canvas.width = container.clientWidth; canvas.height = container.clientHeight; draw(); }
+        function getMousePos(evt) { const rect = canvas.getBoundingClientRect(); return { x: evt.clientX - rect.left, y: evt.clientY - rect.top }; }
+        function screenToWorld(x, y) { return { x: (x - panX) / scale, y: (y - panY) / scale }; }
+        function showToast(message) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 3000); }
+        function updateActiveButton() {
+            document.querySelectorAll('.tool-button').forEach(btn => btn.classList.remove('active'));
+            const actionButtonMap = { 
+                addMale: addMaleBtn, addFemale: addFemaleBtn, addPet: addPetBtn, 
+                addLoss: addLossBtn, addAbortion: addAbortionBtn, addPregnancy: addPregnancyBtn,
+                parentalLink: addParentalLinkBtn, humanRelation: addHumanRelationBtn,
+                addingChild: addChildBtn, 
+                markingTwins: currentAction === 'markingTwins' ? (twinMarkingType === 'identical' ? addIdenticalTwinsBtn : addFraternalTwinsBtn) : null,
+                markingCohabitation: addCohabitationBtn,
+                markIndexPatient: markIndexPatientBtn
+            };
+            if (actionButtonMap[currentAction]) actionButtonMap[currentAction].classList.add('active');
+        }
+        function resetAction() { currentAction = 'select'; selectionBuffer = []; updateActiveButton(); }
+
+        // --- History (Undo/Redo) Management ---
+        function saveState() {
+            redoStack = [];
+            historyStack.push(JSON.stringify({ people, relationships, humanRelations, cohabitations, nextId }));
+            updateUndoRedoButtons();
+        }
+
+        function undo() {
+            if (historyStack.length <= 1) return; // Can't undo the initial state
+            redoStack.push(historyStack.pop());
+            const prevState = JSON.parse(historyStack[historyStack.length - 1]);
+            people = prevState.people;
+            relationships = prevState.relationships;
+            humanRelations = prevState.humanRelations;
+            cohabitations = prevState.cohabitations;
+            nextId = prevState.nextId;
+            deselectAll();
+            updateUndoRedoButtons();
+            draw();
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            const nextStateJSON = redoStack.pop();
+            historyStack.push(nextStateJSON);
+            const nextState = JSON.parse(nextStateJSON);
+            people = nextState.people;
+            relationships = nextState.relationships;
+            humanRelations = nextState.humanRelations;
+            cohabitations = nextState.cohabitations;
+            nextId = nextState.nextId;
+            deselectAll();
+            updateUndoRedoButtons();
+            draw();
+        }
+
+        function updateUndoRedoButtons() {
+            undoBtn.disabled = historyStack.length <= 1;
+            redoBtn.disabled = redoStack.length === 0;
+        }
+
+
+        // --- Layout & Drawing ---
+        function draw() {
+            ctx.save();
+            // Limpiar y establecer el fondo directamente en el canvas
+            ctx.fillStyle = '#f9fafb';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+            
+            relationships.forEach(drawRelationship);
+            humanRelations.forEach(drawHumanRelation);
+            cohabitations.forEach(drawCohabitation);
+            people.forEach(person => {
+                drawPersonShape(person);
+                drawPersonText(person);
+            });
+
+            if (isSelecting) {
+                ctx.fillStyle = 'rgba(0, 120, 255, 0.2)';
+                ctx.strokeStyle = 'rgba(0, 120, 255, 0.8)';
+                ctx.lineWidth = 1 / scale;
+                ctx.fillRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+                ctx.strokeRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
+            }
+
+            ctx.restore();
+        }
+        
+        function drawPersonShape(person) {
+            ctx.fillStyle = '#f9fafb';
+            
+            if (person.isIndexPatient) {
+                const doubleBorder = 4 / scale;
+                ctx.strokeStyle = '#4b5563';
+                ctx.lineWidth = 2 / scale;
+                if (person.gender === 'male') {
+                    ctx.strokeRect(person.x - NODE_SIZE/2 - doubleBorder, person.y - NODE_SIZE/2 - doubleBorder, NODE_SIZE + doubleBorder*2, NODE_SIZE + doubleBorder*2);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(person.x, person.y, NODE_SIZE / 2 + doubleBorder, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.beginPath();
+            if (person.gender === 'male') ctx.rect(person.x - NODE_SIZE/2, person.y - NODE_SIZE/2, NODE_SIZE, NODE_SIZE);
+            else if (person.gender === 'female') ctx.arc(person.x, person.y, NODE_SIZE / 2, 0, Math.PI * 2);
+            else if (person.gender === 'pet') {
+                const r = NODE_SIZE/2;
+                ctx.moveTo(person.x, person.y - r); ctx.lineTo(person.x + r, person.y);
+                ctx.lineTo(person.x, person.y + r); ctx.lineTo(person.x - r, person.y);
+                ctx.closePath();
+            } else if (person.gender === 'loss') {
+                ctx.arc(person.x, person.y, NODE_SIZE / 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#4b5563';
+            } else if (person.gender === 'abortion') {
+                const r = NODE_SIZE / 4;
+                ctx.moveTo(person.x - r, person.y - r); ctx.lineTo(person.x + r, person.y + r);
+                ctx.moveTo(person.x + r, person.y - r); ctx.lineTo(person.x - r, person.y + r);
+            } else if (person.gender === 'pregnancy') {
+                const r = NODE_SIZE / 2.5;
+                ctx.moveTo(person.x, person.y - r); ctx.lineTo(person.x + r, person.y + r); ctx.lineTo(person.x - r, person.y + r);
+                ctx.closePath();
+            }
+            ctx.fill();
+            
+            if (person.gender !== 'loss' && person.gender !== 'abortion') {
+                drawIllnesses(person); 
+            }
+
+            ctx.strokeStyle = '#4b5563'; 
+            ctx.lineWidth = 2 / scale;
+            if (multiSelection.includes(person)) { ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 4 / scale; }
+            else if (selectionBuffer.some(p => p.id === person.id)) { ctx.strokeStyle = '#16a34a'; ctx.lineWidth = 3 / scale; }
+            
+            ctx.beginPath(); 
+            if (person.gender === 'male') ctx.rect(person.x - NODE_SIZE/2, person.y - NODE_SIZE/2, NODE_SIZE, NODE_SIZE);
+            else if (person.gender === 'female') ctx.arc(person.x, person.y, NODE_SIZE / 2, 0, Math.PI * 2);
+            else if (person.gender === 'pet') {
+                const r = NODE_SIZE/2;
+                ctx.moveTo(person.x, person.y - r); ctx.lineTo(person.x + r, person.y);
+                ctx.lineTo(person.x, person.y + r); ctx.lineTo(person.x - r, person.y);
+                ctx.closePath();
+            } else if (person.gender === 'loss') {
+                ctx.arc(person.x, person.y, NODE_SIZE / 4, 0, Math.PI * 2);
+            } else if (person.gender === 'abortion') {
+                 const r = NODE_SIZE / 4;
+                 ctx.moveTo(person.x - r, person.y - r); ctx.lineTo(person.x + r, person.y + r);
+                 ctx.moveTo(person.x + r, person.y - r); ctx.lineTo(person.x - r, person.y + r);
+            } else if (person.gender === 'pregnancy') {
+                const r = NODE_SIZE / 2.5;
+                ctx.moveTo(person.x, person.y - r); ctx.lineTo(person.x + r, person.y + r); ctx.lineTo(person.x - r, person.y + r);
+                ctx.closePath();
+            }
+            ctx.stroke(); 
+
+            if (person.deathDate) {
+                ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 2 / scale; ctx.beginPath();
+                const offset = NODE_SIZE * 0.3;
+                ctx.moveTo(person.x - offset, person.y - offset); ctx.lineTo(person.x + offset, person.y + offset);
+                ctx.moveTo(person.x + offset, person.y - offset); ctx.lineTo(person.x - offset, person.y + offset);
+                ctx.stroke();
+            }
+        }
+
+        function drawPersonText(person) {
+            const age = person.age;
+
+            if (age && !['abortion', 'loss', 'pregnancy'].includes(person.gender)) {
+                ctx.font = `700 ${FONT_SIZE}px Inter`;
+                const ageText = age.toString();
+                const ageWidth = ctx.measureText(ageText).width;
+                ctx.fillStyle = '#f9fafb';
+                ctx.fillRect(person.x - ageWidth / 2 - 2, person.y - FONT_SIZE / 2, ageWidth + 4, FONT_SIZE);
+                ctx.fillStyle = '#1f2937'; 
+                ctx.textAlign = 'center';
+                ctx.fillText(ageText, person.x, person.y + FONT_SIZE / 3);
+            }
+
+            const yOffset = (['loss', 'abortion'].includes(person.gender)) ? (NODE_SIZE / 4) + 15 : NODE_SIZE/2 + FONT_SIZE + 5;
+            
+            ctx.font = `500 ${FONT_SIZE}px Inter`; ctx.textAlign = 'center';
+            const nameText = person.name;
+            if (nameText) {
+                const nameY = person.y + yOffset;
+                const nameWidth = ctx.measureText(nameText).width;
+                ctx.fillStyle = '#f9fafb';
+                ctx.fillRect(person.x - nameWidth/2 - 2, nameY - FONT_SIZE, nameWidth + 4, FONT_SIZE + 2);
+                ctx.fillStyle = '#1f2937';
+                ctx.fillText(nameText, person.x, nameY);
+            }
+
+            const dates = [person.birthDate, person.deathDate].filter(Boolean).join('-');
+            if (dates) {
+                const datesY = person.y + yOffset + (nameText ? FONT_SIZE + 2 : 0);
+                ctx.font = `400 ${FONT_SIZE - 2}px Inter`;
+                const datesWidth = ctx.measureText(dates).width;
+                ctx.fillStyle = '#f9fafb';
+                ctx.fillRect(person.x - datesWidth/2 - 2, datesY - (FONT_SIZE - 2), datesWidth + 4, (FONT_SIZE - 2) + 2);
+                ctx.fillStyle = '#1f2937';
+                ctx.fillText(dates, person.x, datesY);
+            }
+        }
+
+
+        function drawIllnesses(person) {
+            const allIllnessKeys = Object.keys(ILLNESSES);
+            const radius = NODE_SIZE / 2;
+        
+            ctx.save();
+            ctx.beginPath();
+            if (person.gender === 'male' || person.gender === 'pregnancy') {
+                ctx.rect(person.x - radius, person.y - radius, NODE_SIZE, NODE_SIZE);
+            } else {
+                ctx.arc(person.x, person.y, radius, 0, Math.PI * 2);
+            }
+            ctx.clip(); 
+        
+            if (person.gender === 'male' || person.gender === 'pregnancy') {
+                const center = { x: person.x, y: person.y };
+                const r = radius;
+                // NEW: Define 12 points around the square for up to 12 slices
+                const points = [
+                    { x: person.x - r, y: person.y - r },     // TL corner
+                    { x: person.x - r/3, y: person.y - r },   // Top 1/3
+                    { x: person.x + r/3, y: person.y - r },   // Top 2/3
+                    { x: person.x + r, y: person.y - r },     // TR corner
+                    { x: person.x + r, y: person.y - r/3 },   // Right 1/3
+                    { x: person.x + r, y: person.y + r/3 },   // Right 2/3
+                    { x: person.x + r, y: person.y + r },     // BR corner
+                    { x: person.x + r/3, y: person.y + r },   // Bottom 2/3
+                    { x: person.x - r/3, y: person.y + r },   // Bottom 1/3
+                    { x: person.x - r, y: person.y + r },     // BL corner
+                    { x: person.x - r, y: person.y + r/3 },   // Left 2/3
+                    { x: person.x - r, y: person.y - r/3 }    // Left 1/3
+                ];
+                
+                // NEW: Create triangles dynamically from the points
+                const triangles = [];
+                for (let i = 0; i < points.length; i++) {
+                    triangles.push([center, points[i], points[(i + 1) % points.length]]);
+                }
+        
+                person.illnesses.forEach(illnessKey => {
+                    const index = allIllnessKeys.indexOf(illnessKey);
+                    if (index === -1 || index >= triangles.length) return;
+        
+                    const triangle = triangles[index];
+                    ctx.fillStyle = ILLNESSES[illnessKey].color;
+                    ctx.beginPath();
+                    ctx.moveTo(triangle[0].x, triangle[0].y);
+                    ctx.lineTo(triangle[1].x, triangle[1].y);
+                    ctx.lineTo(triangle[2].x, triangle[2].y);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+
+            } else { // Female or other circular shapes
+                const anglePerSlice = (2 * Math.PI) / allIllnessKeys.length;
+                const sliceOffset = -Math.PI / 2;
+                person.illnesses.forEach(illnessKey => {
+                    const index = allIllnessKeys.indexOf(illnessKey);
+                    if (index === -1) return;
+        
+                    ctx.fillStyle = ILLNESSES[illnessKey].color;
+                    ctx.beginPath();
+                    ctx.moveTo(person.x, person.y);
+                    const startAngle = index * anglePerSlice + sliceOffset;
+                    const endAngle = (index + 1) * anglePerSlice + sliceOffset;
+                    ctx.arc(person.x, person.y, radius + 1, startAngle, endAngle);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+            }
+            ctx.restore();
+        }
+
+        function drawRelationship(rel) {
+            const p1 = people.find(p => p.id === rel.p1_id);
+            const p2 = rel.p2_id ? people.find(p => p.id === rel.p2_id) : null;
+            if (!p1) return;
+
+            // --- DELETED: Vertical offset logic removed ---
+
+            let mainStrokeStyle = '#4b5563';
+            if (rel === selectedRelationship) mainStrokeStyle = '#2563eb';
+            
+            ctx.lineWidth = 2 / scale;
+            
+            const p1Bottom = p1.y + NODE_SIZE / 2;
+            let partnerLinkY;
+            let parentsMidX;
+
+            // --- Parte 1: Dibujar conexiones de los padres ---
+            if (p2) { // Dos padres
+                if (rel.status === 'separated' || rel.status === 'divorced') mainStrokeStyle = '#ef4444';
+                ctx.strokeStyle = mainStrokeStyle;
+
+                const p2Bottom = p2.y + NODE_SIZE / 2;
+                partnerLinkY = Math.max(p1Bottom, p2Bottom) + LINE_SPACING_VERTICAL;
+
+                ctx.beginPath(); ctx.moveTo(p1.x, p1Bottom); ctx.lineTo(p1.x, partnerLinkY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(p2.x, p2Bottom); ctx.lineTo(p2.x, partnerLinkY); ctx.stroke();
+                
+                ctx.setLineDash([]);
+                if(rel.status === 'unmarried') ctx.setLineDash([10 / scale, 5 / scale]);
+                ctx.beginPath(); ctx.moveTo(p1.x, partnerLinkY); ctx.lineTo(p2.x, partnerLinkY); ctx.stroke();
+                ctx.setLineDash([]);
+
+                if (rel.status === 'separated' || rel.status === 'divorced') {
+                    const midX = (p1.x + p2.x) / 2;
+                    ctx.save();
+                    ctx.translate(midX, partnerLinkY);
+                    if (rel.status === 'separated') { ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(10, 10); ctx.stroke(); }
+                    if (rel.status === 'divorced') { ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(10, 10); ctx.stroke(); ctx.beginPath(); ctx.moveTo(10, -10); ctx.lineTo(-10, 10); ctx.stroke(); }
+                    ctx.restore();
+                }
+                parentsMidX = (p1.x + p2.x) / 2;
+            } else { // Padre/madre soltero/a
+                ctx.strokeStyle = mainStrokeStyle;
+                partnerLinkY = p1Bottom + LINE_SPACING_VERTICAL / 2;
+                parentsMidX = p1.x;
+                ctx.beginPath(); ctx.moveTo(p1.x, p1Bottom); ctx.lineTo(p1.x, partnerLinkY); ctx.stroke();
+            }
+
+            // --- Parte 2: Dibujar conexiones de los hijos ---
+            const children = rel.children_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
+            if (children.length === 0) return;
+
+            ctx.strokeStyle = '#4b5563';
+            const horizontalChildLineY = partnerLinkY + LINE_SPACING_VERTICAL;
+            
+            ctx.beginPath(); ctx.moveTo(parentsMidX, partnerLinkY); ctx.lineTo(parentsMidX, horizontalChildLineY); ctx.stroke();
+
+            const allTwinIds = rel.twinGroups.flatMap(g => g.ids);
+            const nonTwins = children.filter(c => !allTwinIds.includes(c.id));
+            const attachmentPoints = [parentsMidX];
+            
+            nonTwins.forEach(child => attachmentPoints.push(child.x));
+            rel.twinGroups.forEach(group => {
+                const groupPeople = group.ids.map(id => people.find(p => p.id === id)).filter(Boolean);
+                if (groupPeople.length > 0) {
+                    attachmentPoints.push(groupPeople.reduce((sum, p) => sum + p.x, 0) / groupPeople.length);
+                }
+            });
+
+            if(attachmentPoints.length > 0) {
+                 ctx.beginPath();
+                 ctx.moveTo(Math.min(...attachmentPoints), horizontalChildLineY);
+                 ctx.lineTo(Math.max(...attachmentPoints), horizontalChildLineY);
+                 ctx.stroke();
+            }
+            
+            nonTwins.forEach(child => {
+                ctx.setLineDash([]);
+                if (child.isAdopted) {
+                    ctx.setLineDash([2 / scale, 4 / scale]); // Dotted line
+                }
+                const nodeRadius = (['loss', 'abortion'].includes(child.gender)) ? NODE_SIZE/4 : (child.gender === 'pregnancy' ? NODE_SIZE/2.5 : NODE_SIZE/2);
+                const yEnd = child.y - nodeRadius;
+                ctx.beginPath(); ctx.moveTo(child.x, horizontalChildLineY); ctx.lineTo(child.x, yEnd); ctx.stroke();
+                ctx.setLineDash([]);
+            });
+
+            rel.twinGroups.forEach(group => {
+                const t1 = people.find(p => p.id === group.ids[0]);
+                const t2 = people.find(p => p.id === group.ids[1]);
+                if (!t1 || !t2) return;
+                
+                ctx.setLineDash([]);
+                ctx.strokeStyle = '#4b5563';
+                const midPointX = (t1.x + t2.x) / 2;
+                const yEnd1 = t1.y - NODE_SIZE / 2;
+                const yEnd2 = t2.y - NODE_SIZE / 2;
+                const junctionY = Math.min(yEnd1, yEnd2) - 20;
+
+                if (group.type === 'fraternal') { // Mellizos
+                    ctx.beginPath(); ctx.moveTo(midPointX, horizontalChildLineY); ctx.lineTo(midPointX, junctionY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(midPointX, junctionY); ctx.lineTo(t1.x, yEnd1); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(midPointX, junctionY); ctx.lineTo(t2.x, yEnd2); ctx.stroke();
+                } else { // 'identical' - Gemelos
+                    const triBaseY = junctionY;
+                    const triTopY = triBaseY - 15;
+                    ctx.beginPath();
+                    ctx.moveTo(midPointX, horizontalChildLineY); ctx.lineTo(midPointX, triTopY); ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(t1.x, yEnd1); ctx.lineTo(t1.x, triBaseY);
+                    ctx.lineTo(midPointX, triTopY);
+                    ctx.lineTo(t2.x, triBaseY);
+                    ctx.lineTo(t2.x, yEnd2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(t1.x, triBaseY); ctx.lineTo(t2.x, triBaseY); ctx.stroke();
+                }
+            });
+        }
+
+        function drawHumanRelation(rel) {
+            const p1 = people.find(p => p.id === rel.p1_id), p2 = people.find(p => p.id === rel.p2_id);
+            if (!p1 || !p2) return;
+
+            ctx.lineWidth = 2 / scale;
+            let strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#4b5563';
+            
+            const offset = 5 / scale;
+            ctx.setLineDash([]);
+            
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist === 0) return;
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            let hasStroked = false;
+
+            ctx.beginPath();
+            switch (rel.type) {
+                case 'distante':
+                    ctx.setLineDash([2 / scale, 4 / scale]);
+                    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+                    break;
+                case 'cercana':
+                    strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#10b981';
+                    ctx.moveTo(p1.x - dy/dist * offset, p1.y + dx/dist * offset); 
+                    ctx.lineTo(p2.x - dy/dist * offset, p2.y + dx/dist * offset);
+                    ctx.moveTo(p1.x + dy/dist * offset, p1.y - dx/dist * offset);
+                    ctx.lineTo(p2.x + dy/dist * offset, p2.y - dx/dist * offset);
+                    break;
+                case 'estrecha':
+                    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+                    ctx.moveTo(p1.x - dy/dist * offset, p1.y + dx/dist * offset); 
+                    ctx.lineTo(p2.x - dy/dist * offset, p2.y + dx/dist * offset);
+                    ctx.moveTo(p1.x + dy/dist * offset, p1.y - dx/dist * offset);
+                    ctx.lineTo(p2.x + dy/dist * offset, p2.y - dx/dist * offset);
+                    break;
+                case 'conflictiva':
+                    const amplitude = 8 / scale;
+                    const segments = Math.hypot(p2.x-p1.x, p2.y-p1.y) / 15;
+                    ctx.moveTo(p1.x, p1.y);
+                    for (let i = 0; i <= segments; i++) {
+                        const progress = i / segments;
+                        const x = p1.x + dx * progress;
+                        const y = p1.y + dy * progress;
+                        const perpAngle = Math.atan2(dy, dx) + Math.PI / 2;
+                        const zigZagOffset = (i % 2 === 0 ? 1 : -1) * amplitude * Math.sin(progress * Math.PI);
+                        ctx.lineTo(x + Math.cos(perpAngle) * zigZagOffset, y + Math.sin(perpAngle) * zigZagOffset);
+                    }
+                    break;
+                case 'abuso':
+                    strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#3b82f6';
+                    ctx.strokeStyle = strokeStyle;
+                    ctx.fillStyle = strokeStyle;
+
+                    const angle = Math.atan2(dy, dx);
+                    const arrowSize = 12 / scale;
+                    // Punto final de la línea en zigzag, antes de la flecha
+                    const endX = p2.x - Math.cos(angle) * (NODE_SIZE / 2 + arrowSize);
+                    const endY = p2.y - Math.sin(angle) * (NODE_SIZE / 2 + arrowSize);
+
+                    // Draw jagged line
+                    ctx.beginPath();
+                    const ampAbuse = 8 / scale;
+                    const endDx = endX - p1.x;
+                    const endDy = endY - p1.y;
+                    const segsAbuse = Math.hypot(endDx, endDy) / 15;
+                    
+                    ctx.moveTo(p1.x, p1.y);
+                    for (let i = 0; i <= segsAbuse; i++) {
+                        const progress = i / segsAbuse;
+                        const x = p1.x + endDx * progress;
+                        const y = p1.y + endDy * progress;
+                        const perpAngle = Math.atan2(endDy, endDx) + Math.PI / 2;
+                        const zigZagOffset = (i % 2 === 0 ? 1 : -1) * ampAbuse * Math.sin(progress * Math.PI);
+                        ctx.lineTo(x + Math.cos(perpAngle) * zigZagOffset, y + Math.sin(perpAngle) * zigZagOffset);
+                    }
+                     ctx.stroke();
+
+
+                    // Draw arrow at the end of the jagged line
+                    ctx.save();
+                    ctx.translate(endX, endY);
+                    ctx.rotate(angle);
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(-arrowSize, -arrowSize / 2);
+                    ctx.lineTo(-arrowSize, arrowSize / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
+                    
+                    hasStroked = true;
+                    break;
+                case 'rota':
+                    const ratio = 10 / dist;
+                    ctx.moveTo(p1.x, p1.y); ctx.lineTo(midX - dx * ratio, midY - dy * ratio);
+                    ctx.moveTo(p2.x, p2.y); ctx.lineTo(midX + dx * ratio, midY + dy * ratio);
+                    ctx.stroke(); 
+                    ctx.beginPath();
+                    ctx.save();
+                    ctx.translate(midX - dx * ratio * 0.5, midY - dy * ratio * 0.5);
+                    ctx.rotate(Math.atan2(dy, dx)); 
+                    ctx.moveTo(0, -8); ctx.lineTo(0, 8);
+                    ctx.restore();
+                    ctx.save();
+                    ctx.translate(midX + dx * ratio * 0.5, midY + dy * ratio * 0.5);
+                    ctx.rotate(Math.atan2(dy, dx)); 
+                    ctx.moveTo(0, -8); ctx.lineTo(0, 8);
+                    ctx.restore();
+                    break; 
+            }
+            if (!hasStroked) {
+                ctx.strokeStyle = strokeStyle;
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+        }
+
+
+        function drawCohabitation(cohabitation) {
+            if (cohabitation.person_ids.length < 2) return;
+
+            const cohabitingPeople = cohabitation.person_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
+            if (cohabitingPeople.length === 0) return;
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            cohabitingPeople.forEach(p => {
+                minX = Math.min(minX, p.x - NODE_SIZE / 2);
+                minY = Math.min(minY, p.y - NODE_SIZE / 2);
+                maxX = Math.max(maxX, p.x + NODE_SIZE / 2);
+                maxY = Math.max(maxY, p.y + NODE_SIZE / 2);
+            });
+
+            const padding = 20; // Padding around the group
+            minX -= padding; minY -= padding;
+            maxX += padding; maxY += padding;
+
+            ctx.strokeStyle = '#4b5563';
+            ctx.lineWidth = 1.5 / scale;
+            ctx.setLineDash([5 / scale, 5 / scale]); // Dashed line
+            
+            if (cohabitation === selectedCohabitation) {
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 3 / scale;
+            }
+
+            ctx.beginPath();
+            ctx.rect(minX, minY, maxX - minX, maxY - minY);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash
+        }
+
+        // --- Core App Logic ---
+        function addPerson(x, y, gender) {
+            const isEvent = ['loss', 'abortion', 'pregnancy'].includes(gender);
+            const person = { 
+                id: nextId++, 
+                name: isEvent ? '' : 'Nuevo', 
+                gender, 
+                birthDate: '', deathDate: '', age: '', x, y, illnesses: [],
+                isIndexPatient: false, isAdopted: false
+            };
+            people.push(person); 
+            selectPerson(person); 
+            resetAction(); 
+            saveState();
+            draw();
+        }
+        function getPersonAt(worldX, worldY) { return people.slice().reverse().find(p => Math.sqrt((worldX-p.x)**2 + (worldY-p.y)**2) < NODE_SIZE/2) || null; }
+        
+        function getRelationshipAt(worldX, worldY) {
+            for (const rel of relationships) {
+                const p1 = people.find(p=>p.id===rel.p1_id), p2 = people.find(p=>p.id===rel.p2_id);
+                if (!p1 || !p2) continue;
+                const partnerLinkY = Math.max(p1.y + NODE_SIZE/2, p2.y + NODE_SIZE/2) + LINE_SPACING_VERTICAL;
+                if (worldY > partnerLinkY - 10 && worldY < partnerLinkY + 10) {
+                    if (worldX > Math.min(p1.x, p2.x) - 10 && worldX < Math.max(p1.x, p2.x) + 10) return rel;
+                }
+            } 
+            return null;
+        }
+
+        function getHumanRelationAt(worldX, worldY) {
+             for (const rel of humanRelations) {
+                const p1 = people.find(p => p.id === rel.p1_id);
+                const p2 = people.find(p => p.id === rel.p2_id);
+                if (!p1 || !p2) continue;
+
+                const dx = p2.x - p1.x, dy = p2.y - p1.y;
+                const lenSq = dx * dx + dy * dy;
+                if (lenSq === 0) continue;
+                let t = ((worldX - p1.x) * dx + (worldY - p1.y) * dy) / lenSq;
+                t = Math.max(0, Math.min(1, t));
+                const nearestX = p1.x + t * dx, nearestY = p1.y + t * dy;
+                if (Math.sqrt((worldX - nearestX) ** 2 + (worldY - nearestY) ** 2) < 10 / scale) return rel;
+            }
+            return null;
+        }
+
+        function getCohabitationAt(worldX, worldY) {
+            for (const cohabitation of cohabitations) {
+                const cohabitingPeople = cohabitation.person_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
+                if (cohabitingPeople.length < 2) continue;
+
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                cohabitingPeople.forEach(p => {
+                    minX = Math.min(minX, p.x - NODE_SIZE / 2); minY = Math.min(minY, p.y - NODE_SIZE / 2);
+                    maxX = Math.max(maxX, p.x + NODE_SIZE / 2); maxY = Math.max(maxY, p.y + NODE_SIZE / 2);
+                });
+
+                const padding = 20; minX -= padding; minY -= padding; maxX += padding; maxY += padding;
+                const tolerance = 10 / scale;
+
+                if (worldY >= minY - tolerance && worldY <= minY + tolerance && worldX >= minX - tolerance && worldX <= maxX + tolerance) return cohabitation;
+                if (worldY >= maxY - tolerance && worldY <= maxY + tolerance && worldX >= minX - tolerance && worldX <= maxX + tolerance) return cohabitation;
+                if (worldX >= minX - tolerance && worldX <= minX + tolerance && worldY >= minY - tolerance && worldY <= maxY + tolerance) return cohabitation;
+                if (worldX >= maxX - tolerance && worldX <= maxX + tolerance && worldY >= minY - tolerance && worldY <= maxY + tolerance) return cohabitation;
+            }
+            return null;
+        }
+
+
+        function updatePropertiesPanel() {
+            const hasMultiSelection = multiSelection.length > 1;
+            personProperties.classList.toggle('active', multiSelection.length === 1 && !hasMultiSelection);
+            parentalLinkProperties.classList.toggle('active', !!selectedRelationship);
+            humanRelationProperties.classList.toggle('active', !!selectedHumanRelation);
+            cohabitationProperties.classList.toggle('active', !!selectedCohabitation);
+            noSelection.style.display = (multiSelection.length === 0 && !selectedRelationship && !selectedHumanRelation && !selectedCohabitation) ? 'block' : 'none';
+
+            if (multiSelection.length === 1) {
+                const person = multiSelection[0];
+                nameInput.value = person.name;
+                birthDateInput.value = person.birthDate;
+                deathDateInput.value = person.deathDate;
+                ageInput.value = person.age;
+                
+                isAdoptedCheckbox.checked = person.isAdopted;
+                document.querySelectorAll('#illnessCheckboxes input').forEach(chk => chk.checked = person.illnesses.includes(chk.dataset.illness));
+            } else if (selectedRelationship) { 
+                parentalStatusSelect.value = selectedRelationship.status; 
+            } else if(selectedHumanRelation) {
+                humanRelationSelect.value = selectedHumanRelation.type;
+            }
+        }
+        function selectPerson(person) { multiSelection = [person]; selectedRelationship=null; selectedHumanRelation=null; selectedCohabitation=null; updatePropertiesPanel(); draw(); }
+        function selectRelationship(rel) { selectedRelationship=rel; multiSelection=[]; selectedHumanRelation=null; selectedCohabitation=null; updatePropertiesPanel(); draw(); }
+        function selectHumanRelation(rel) { selectedHumanRelation=rel; multiSelection=[]; selectedRelationship=null; selectedCohabitation=null; updatePropertiesPanel(); draw(); }
+        function selectCohabitation(coh) { selectedCohabitation=coh; multiSelection=[]; selectedRelationship=null; selectedHumanRelation=null; updatePropertiesPanel(); draw(); }
+        function deselectAll() { multiSelection=[]; selectedRelationship=null; selectedHumanRelation=null; selectedCohabitation=null; updatePropertiesPanel(); draw(); }
+        
+        function reorderAndPositionSiblings(rel) {
+            const children = rel.children_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
+            if (children.length < 2) return;
+            const oldAvgX = children.reduce((sum, c) => sum + c.x, 0) / children.length;
+            const avgY = children.reduce((sum, c) => sum + c.y, 0) / children.length;
+            children.sort((a, b) => (parseInt(a.birthDate) || 9999) - (parseInt(b.birthDate) || 9999));
+            const gap = NODE_SIZE * 1.5;
+            const totalWidth = children.length * gap - (gap - NODE_SIZE);
+            let currentX = oldAvgX - totalWidth / 2 + NODE_SIZE/2;
+            rel.children_ids = [];
+            children.forEach(child => { child.x = currentX; child.y = avgY; currentX += gap; rel.children_ids.push(child.id); });
+        }
+        
+        function deleteSelection() {
+            if (multiSelection.length > 0 || selectedRelationship || selectedHumanRelation || selectedCohabitation) {
+                saveState();
+            }
+
+            if (multiSelection.length > 0) {
+                const idsToDelete = new Set(multiSelection.map(p => p.id));
+                const relsToReorder = new Set();
+        
+                relationships.forEach(rel => {
+                    const childrenBefore = rel.children_ids.length;
+                    rel.children_ids = rel.children_ids.filter(id => !idsToDelete.has(id));
+                    if(rel.children_ids.length < childrenBefore && rel.children_ids.length > 0) relsToReorder.add(rel);
+                    rel.twinGroups = rel.twinGroups.filter(group => !group.ids.some(id => idsToDelete.has(id)));
+                });
+        
+                people = people.filter(p => !idsToDelete.has(p.id));
+                relationships = relationships.filter(rel => !idsToDelete.has(rel.p1_id) && !idsToDelete.has(rel.p2_id));
+                humanRelations = humanRelations.filter(rel => !idsToDelete.has(rel.p1_id) && !idsToDelete.has(rel.p2_id));
+                cohabitations = cohabitations.filter(coh => !coh.person_ids.some(id => idsToDelete.has(id)));
+                
+                relsToReorder.forEach(rel => reorderAndPositionSiblings(rel));
+        
+            } else if (selectedRelationship) {
+                relationships = relationships.filter(r => r.id !== selectedRelationship.id);
+            } else if (selectedHumanRelation) {
+                humanRelations = humanRelations.filter(r => r.id !== selectedHumanRelation.id);
+            } else if (selectedCohabitation) {
+                cohabitations = cohabitations.filter(c => c.id !== selectedCohabitation.id);
+            }
+            
+            deselectAll();
+            draw();
+        }
+
+        // --- Event Handlers ---
+        window.addEventListener('resize', resizeCanvas);
+        undoBtn.addEventListener('click', undo);
+        redoBtn.addEventListener('click', redo);
+        addMaleBtn.addEventListener('click', () => { currentAction = 'addMale'; updateActiveButton(); });
+        addFemaleBtn.addEventListener('click', () => { currentAction = 'addFemale'; updateActiveButton(); });
+        addPetBtn.addEventListener('click', () => { currentAction = 'addPet'; updateActiveButton(); });
+        addLossBtn.addEventListener('click', () => { currentAction = 'addLoss'; updateActiveButton(); });
+        addAbortionBtn.addEventListener('click', () => { currentAction = 'addAbortion'; updateActiveButton(); });
+        addPregnancyBtn.addEventListener('click', () => { currentAction = 'addPregnancy'; updateActiveButton(); });
+        
+        addParentalLinkBtn.addEventListener('click', () => {
+            if (multiSelection.length === 2) {
+                saveState();
+                const [p1, p2] = multiSelection;
+                const existingLink = relationships.find(r => 
+                    r.p2_id && ((r.p1_id === p1.id && r.p2_id === p2.id) || (r.p1_id === p2.id && r.p2_id === p1.id))
+                );
+
+                if (!existingLink) {
+                    const newRel = { id: nextId++, p1_id: p1.id, p2_id: p2.id, children_ids: [], twinGroups: [], status: 'married'};
+                    relationships.push(newRel);
+                    showToast('Vínculo de pareja creado.');
+                    selectRelationship(newRel);
+                } else {
+                    showToast('Ya existe un vínculo entre estas dos personas.');
+                }
+                resetAction();
+            } else {
+                currentAction = 'parentalLink'; 
+                selectionBuffer = []; 
+                updateActiveButton(); 
+                showToast('Selecciona a la primera persona.');
+            }
+        });
+
+        addHumanRelationBtn.addEventListener('click', () => { currentAction = 'humanRelation'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona a la primera persona.'); });
+        addChildBtn.addEventListener('click', () => { currentAction = 'addingChild'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al hijo/a.'); });
+        addIdenticalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'identical'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer gemelo.'); });
+        addFraternalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'fraternal'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer mellizo.'); });
+
+        addCohabitationBtn.addEventListener('click', () => {
+            if (multiSelection.length > 1) {
+                saveState();
+                cohabitations.push({ id: nextId++, person_ids: multiSelection.map(p => p.id) });
+                showToast('Área de cohabitación creada.');
+                deselectAll();
+                draw();
+            } else {
+                showToast('Selecciona al menos a dos personas para marcar cohabitación.');
+            }
+            resetAction();
+        });
+        markIndexPatientBtn.addEventListener('click', () => {
+            if (multiSelection.length === 1) {
+                saveState();
+                const selected = multiSelection[0];
+                people.forEach(p => p.isIndexPatient = false);
+                selected.isIndexPatient = true;
+                showToast(`${selected.name} marcado como paciente índice.`);
+                draw();
+            } else {
+                showToast('Selecciona a una única persona para marcarla como paciente índice.');
+            }
+            resetAction();
+        });
+        
+        nameInput.addEventListener('input', (e) => { if (multiSelection.length === 1) { saveState(); multiSelection[0].name = e.target.value; draw(); } });
+        birthDateInput.addEventListener('input', (e) => { 
+            if (multiSelection.length === 1) { 
+                saveState();
+                const person = multiSelection[0];
+                person.birthDate = e.target.value;
+                const parentRel = relationships.find(r => r.children_ids.includes(person.id));
+                if (parentRel) reorderAndPositionSiblings(parentRel);
+                updatePropertiesPanel();
+                draw(); 
+            } 
+        });
+        deathDateInput.addEventListener('input', (e) => { if (multiSelection.length === 1) { saveState(); multiSelection[0].deathDate = e.target.value; updatePropertiesPanel(); draw(); } });
+        ageInput.addEventListener('input', (e) => { if (multiSelection.length === 1) { saveState(); multiSelection[0].age = e.target.value; draw(); } });
+        isAdoptedCheckbox.addEventListener('change', (e) => {
+            if (multiSelection.length === 1) { saveState(); multiSelection[0].isAdopted = e.target.checked; draw(); }
+        });
+
+        deletePersonBtn.addEventListener('click', deleteSelection);
+        deleteParentalLinkBtn.addEventListener('click', deleteSelection);
+        deleteHumanRelationBtn.addEventListener('click', deleteSelection);
+        deleteCohabitationBtn.addEventListener('click', deleteSelection);
+        window.addEventListener('keydown', e => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); } 
+            else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); } 
+            else if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (document.activeElement.tagName.toUpperCase() !== 'INPUT') { e.preventDefault(); deleteSelection(); }
+            }
+        });
+
+        illnessCheckboxesContainer.addEventListener('change', (e) => {
+            if (e.target.type === 'checkbox' && multiSelection.length === 1) {
+                saveState();
+                const illness = e.target.dataset.illness, person = multiSelection[0];
+                if (e.target.checked) { if (!person.illnesses.includes(illness)) person.illnesses.push(illness); }
+                else { person.illnesses = person.illnesses.filter(i => i !== illness); }
+                draw();
+            }
+        });
+        parentalStatusSelect.addEventListener('change', (e) => { if (selectedRelationship) { saveState(); selectedRelationship.status = e.target.value; draw(); } });
+        humanRelationSelect.addEventListener('change', (e) => { if (selectedHumanRelation) { saveState(); selectedHumanRelation.type = e.target.value; draw(); } });
+
+        canvas.addEventListener('mousedown', (e) => {
+            const mousePos = getMousePos(e);
+            const worldPos = screenToWorld(mousePos.x, mousePos.y);
+
+            if (e.button === 1 || e.button === 2) {
+                isPanning = true; panStartX = mousePos.x; panStartY = mousePos.y;
+                canvas.style.cursor = 'grabbing'; e.preventDefault(); return;
+            }
+
+            let targetPerson = getPersonAt(worldPos.x, worldPos.y);
+            const targetRel = targetPerson ? null : getRelationshipAt(worldPos.x, worldPos.y);
+            const targetCohabitation = targetPerson || targetRel ? null : getCohabitationAt(worldPos.x, worldPos.y);
+            const targetHumanRelation = targetPerson || targetRel || targetCohabitation ? null : getHumanRelationAt(worldPos.x, worldPos.y);
+
+            switch(currentAction) {
+                case 'addMale': addPerson(worldPos.x, worldPos.y, 'male'); return;
+                case 'addFemale': addPerson(worldPos.x, worldPos.y, 'female'); return;
+                case 'addPet': addPerson(worldPos.x, worldPos.y, 'pet'); return;
+                case 'addLoss': addPerson(worldPos.x, worldPos.y, 'loss'); return;
+                case 'addAbortion': addPerson(worldPos.x, worldPos.y, 'abortion'); return;
+                case 'addPregnancy': addPerson(worldPos.x, worldPos.y, 'pregnancy'); return;
+                case 'parentalLink':
+                    if (targetPerson) {
+                        selectionBuffer.push(targetPerson);
+                        if (selectionBuffer.length === 1) showToast('Selecciona a la segunda persona.');
+                        else if (selectionBuffer.length === 2) {
+                            saveState();
+                            relationships.push({ id: nextId++, p1_id: selectionBuffer[0].id, p2_id: selectionBuffer[1].id, children_ids: [], twinGroups: [], status: 'married'});
+                            resetAction(); showToast('Vínculo creado.');
+                        }
+                    } draw(); return;
+                case 'humanRelation':
+                    if (targetPerson) {
+                        selectionBuffer.push(targetPerson);
+                        if (selectionBuffer.length === 1) showToast('Selecciona a la segunda persona.');
+                        else if (selectionBuffer.length === 2) {
+                            saveState();
+                            humanRelations.push({ id: nextId++, p1_id: selectionBuffer[0].id, p2_id: selectionBuffer[1].id, type: 'cercana'});
+                            resetAction(); showToast('Relación creada.');
+                        }
+                    } draw(); return;
+                case 'addingChild':
+                    if (selectionBuffer.length === 0 && targetPerson) { 
+                        selectionBuffer.push(targetPerson); 
+                        showToast('Ahora, haz clic en un padre/madre o en un vínculo de pareja.');
+                        draw(); return;
+                    } 
+                    if (selectionBuffer.length === 1) {
+                        const child = selectionBuffer[0];
+                        const targetParent = targetPerson;
+                        const targetRel = getRelationshipAt(worldPos.x, worldPos.y);
+                        if (!targetParent && !targetRel) return;
+                        if (targetParent && targetParent.id === child.id) { showToast('No se puede vincular a una persona consigo misma.'); return; }
+                        saveState();
+                        relationships.forEach(r => r.children_ids = r.children_ids.filter(id => id !== child.id));
+                        relationships = relationships.filter(r => !(r.p2_id === null && r.children_ids.length === 0));
+                        if (targetRel) {
+                            if(!targetRel.children_ids.includes(child.id)) {
+                                targetRel.children_ids.push(child.id); showToast(`${child.name} añadido/a como hijo/a.`);
+                            }
+                            reorderAndPositionSiblings(targetRel);
+                        } else if (targetParent) {
+                             const existingRel = relationships.find(r => r.p1_id === targetParent.id || r.p2_id === targetParent.id);
+                             if (existingRel) {
+                                if(!existingRel.children_ids.includes(child.id)) {
+                                    existingRel.children_ids.push(child.id);
+                                    showToast(`${child.name} añadido/a como hijo/a de ${targetParent.name}.`);
+                                }
+                                reorderAndPositionSiblings(existingRel);
+                             } else {
+                                const newRel = { id: nextId++, p1_id: targetParent.id, p2_id: null, children_ids: [child.id], twinGroups: [], status: 'unmarried' };
+                                relationships.push(newRel);
+                                showToast(`${child.name} vinculado/a a ${targetParent.name}.`);
+                                reorderAndPositionSiblings(newRel);
+                             }
+                        }
+                        resetAction();
+                    }
+                    draw(); return;
+                case 'markingTwins':
+                     if (targetPerson) {
+                        selectionBuffer.push(targetPerson);
+                        if (selectionBuffer.length === 1) showToast(`Selecciona al segundo ${twinMarkingType === 'identical' ? 'gemelo' : 'mellizo'}.`);
+                        else if (selectionBuffer.length === 2) {
+                            const [p1, p2] = selectionBuffer;
+                            const parentRel = relationships.find(r => r.children_ids.includes(p1.id) && r.children_ids.includes(p2.id));
+                            if (parentRel) { 
+                                const isAlreadyTwin = parentRel.twinGroups.some(g => g.ids.includes(p1.id) || g.ids.includes(p2.id));
+                                if (!isAlreadyTwin) {
+                                    saveState();
+                                    parentRel.twinGroups.push({ ids: [p1.id, p2.id], type: twinMarkingType }); showToast('Vínculo creado.'); 
+                                } else { 
+                                    showToast('Una de estas personas ya está en un grupo de gemelos.'); 
+                                }
+                            } else { 
+                                showToast('No se encontró una relación parental común.'); 
+                            }
+                            resetAction();
+                        }
+                    } draw(); return;
+                default:
+                    if (targetPerson) {
+                        if (e.shiftKey) {
+                            // Lógica estándar de multiselección
+                            if (multiSelection.includes(targetPerson)) {
+                                multiSelection = multiSelection.filter(p => p.id !== targetPerson.id);
+                            } else {
+                                multiSelection.push(targetPerson);
+                            }
+                        } else {
+                            if (!multiSelection.includes(targetPerson) || multiSelection.length > 1) {
+                                multiSelection = [targetPerson];
+                            }
+                        }
+                        selectedRelationship = null; selectedHumanRelation = null; selectedCohabitation = null;
+                        isDragging = true; dragOffsetX = worldPos.x; dragOffsetY = worldPos.y;
+                    } else if (targetRel) { 
+                        selectRelationship(targetRel);
+                    } else if (targetHumanRelation) { 
+                        selectHumanRelation(targetHumanRelation);
+                    } else if (targetCohabitation) { 
+                        selectCohabitation(targetCohabitation);
+                    } else {
+                        isSelecting = true; selectionRect = {x: worldPos.x, y: worldPos.y, w: 0, h: 0};
+                        deselectAll();
+                    }
+            }
+            updatePropertiesPanel();
+            draw();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const mousePos = getMousePos(e);
+            if(isPanning) {
+                const dx = mousePos.x - panStartX, dy = mousePos.y - panStartY;
+                panX += dx; panY += dy;
+                panStartX = mousePos.x; panStartY = mousePos.y;
+                draw(); return;
+            }
+            const worldPos = screenToWorld(mousePos.x, mousePos.y);
+            if (isDragging && multiSelection.length > 0) {
+                const dx = worldPos.x - dragOffsetX, dy = worldPos.y - dragOffsetY;
+                multiSelection.forEach(p => { p.x += dx; p.y += dy; });
+                dragOffsetX = worldPos.x; dragOffsetY = worldPos.y;
+                draw();
+            } else if (isSelecting) {
+                selectionRect.w = worldPos.x - selectionRect.x;
+                selectionRect.h = worldPos.y - selectionRect.y;
+                draw();
+            }
+            canvas.style.cursor = (getPersonAt(worldPos.x, worldPos.y) || getRelationshipAt(worldPos.x, worldPos.y) || getCohabitationAt(worldPos.x, worldPos.y) || getHumanRelationAt(worldPos.x, worldPos.y) || currentAction !== 'select') ? 'pointer' : 'default';
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if(isDragging) saveState();
+            if(isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
+            if(isSelecting) {
+                isSelecting = false;
+                const sx = Math.min(selectionRect.x, selectionRect.x + selectionRect.w);
+                const sy = Math.min(selectionRect.y, selectionRect.y + selectionRect.h);
+                const ex = Math.max(selectionRect.x, selectionRect.x + selectionRect.w);
+                const ey = Math.max(selectionRect.y, selectionRect.y + selectionRect.h);
+                multiSelection = people.filter(p => p.x > sx && p.x < ex && p.y > sy && p.y < ey);
+                updatePropertiesPanel(); draw();
+            }
+            isDragging = false;
+        });
+
+        canvas.addEventListener('wheel', e => {
+            e.preventDefault();
+            const mousePos = getMousePos(e);
+            const worldPosBeforeZoom = screenToWorld(mousePos.x, mousePos.y);
+            scale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
+            scale = Math.max(0.1, Math.min(5, scale));
+            const worldPosAfterZoom = screenToWorld(mousePos.x, mousePos.y);
+            panX += (worldPosAfterZoom.x - worldPosBeforeZoom.x) * scale;
+            panY += (worldPosAfterZoom.y - worldPosBeforeZoom.y) * scale;
+            draw();
+        });
+
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+
+        // --- Import/Export ---
+        saveBtn.addEventListener('click', () => {
+            const data = { people, relationships, humanRelations, cohabitations, nextId };
+            const json = JSON.stringify(data, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'genograma.json'; a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        importBtn.addEventListener('click', () => importFile.click());
+        importFile.addEventListener('change', e => {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    people = data.people || []; relationships = data.relationships || [];
+                    humanRelations = data.humanRelations || []; cohabitations = data.cohabitations || [];
+                    nextId = data.nextId || Math.max(...people.map(p => p.id), 0) + 1;
+                    deselectAll(); saveState(); draw();
+                } catch (err) { showToast('Error al importar el archivo.'); console.error(err); }
+            };
+            reader.readText(file);
+        });
+        
+        function drawLegendToCanvas(legendCtx, width) {
+            const PADDING = 25; const ITEM_HEIGHT = 28; const TITLE_FONT = 'bold 16px Inter';
+            const FONT = '14px Inter'; const SECTION_GAP = 40;
+        
+            legendCtx.fillStyle = '#ffffff'; legendCtx.fillRect(0, 0, width, 2000);
+        
+            const sections = [];
+            const symbolsSection = { title: 'Símbolos', items: [] };
+            symbolsSection.items.push({ label: 'Hombre', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.fillRect(lx, ly - 10, 20, 20); legendCtx.strokeRect(lx, ly - 10, 20, 20); }});
+            symbolsSection.items.push({ label: 'Mujer', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.beginPath(); legendCtx.arc(lx + 10, ly, 10, 0, Math.PI * 2); legendCtx.fill(); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Mascota', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.beginPath(); legendCtx.moveTo(lx + 10, ly - 10); legendCtx.lineTo(lx + 20, ly); legendCtx.lineTo(lx + 10, ly + 10); legendCtx.lineTo(lx, ly); legendCtx.closePath(); legendCtx.fill(); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Embarazo', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; const r = 10; legendCtx.beginPath(); legendCtx.moveTo(lx+r, ly-r); legendCtx.lineTo(lx+r*2, ly+r); legendCtx.lineTo(lx, ly+r); legendCtx.closePath(); legendCtx.fill(); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Pérdida', draw: (lx, ly) => { legendCtx.fillStyle = '#4b5563'; legendCtx.beginPath(); legendCtx.arc(lx + 10, ly, 7, 0, Math.PI*2); legendCtx.fill(); }});
+            symbolsSection.items.push({ label: 'Aborto', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; const r=7; legendCtx.beginPath(); legendCtx.moveTo(lx+10-r, ly-r); legendCtx.lineTo(lx+10+r, ly+r); legendCtx.moveTo(lx+10+r, ly-r); legendCtx.lineTo(lx+10-r, ly+r); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Paciente Índice', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.strokeRect(lx, ly-10, 20, 20); legendCtx.strokeRect(lx-3, ly-13, 26, 26); }});
+            symbolsSection.items.push({ label: 'Fallecido', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.strokeRect(lx, ly-10, 20, 20); legendCtx.beginPath(); legendCtx.moveTo(lx+4, ly-6); legendCtx.lineTo(lx+16, ly+6); legendCtx.moveTo(lx+16, ly-6); legendCtx.lineTo(lx+4, ly+6); legendCtx.stroke(); }});
+            sections.push(symbolsSection);
+        
+            const linksSection = { title: 'Vínculos de Pareja', items: [] };
+            linksSection.items.push({ label: 'Casados', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); }});
+            linksSection.items.push({ label: 'No casados', draw: (lx, ly) => { legendCtx.setLineDash([5, 3]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.setLineDash([]); }});
+            linksSection.items.push({ label: 'Separados', draw: (lx, ly) => { legendCtx.strokeStyle = '#ef4444'; legendCtx.lineWidth = 2; legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+15, ly-5); legendCtx.lineTo(lx+25, ly+5); legendCtx.stroke(); }});
+            linksSection.items.push({ label: 'Divorciados', draw: (lx, ly) => { legendCtx.strokeStyle = '#ef4444'; legendCtx.lineWidth = 2; legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+15, ly-5); legendCtx.lineTo(lx+25, ly+5); legendCtx.moveTo(lx+25, ly-5); legendCtx.lineTo(lx+15, ly+5);legendCtx.stroke(); }});
+            sections.push(linksSection);
+
+            const relationsSection = { title: 'Relaciones', items: [] };
+            relationsSection.items.push({ label: 'Cercana', draw: (lx, ly) => { legendCtx.strokeStyle = '#10b981'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly-2); legendCtx.lineTo(lx+40, ly-2); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly+2); legendCtx.lineTo(lx+40, ly+2); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Estrecha', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly - 4); legendCtx.lineTo(lx + 40, ly - 4); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx + 40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly + 4); legendCtx.lineTo(lx + 40, ly + 4); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Conflictiva', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); for(let i=0; i<40; i+=10) { legendCtx.lineTo(lx+i+5, ly + (i%20===0 ? -5:5)); } legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Distante', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([2, 4]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.setLineDash([]); }});
+            relationsSection.items.push({ label: 'Rota', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+15, ly); legendCtx.moveTo(lx+25, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+18, ly-5); legendCtx.lineTo(lx+18, ly+5); legendCtx.moveTo(lx+22, ly-5); legendCtx.lineTo(lx+22, ly+5); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Abuso', draw: (lx, ly) => {
+                legendCtx.strokeStyle = '#3b82f6'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]);
+                legendCtx.beginPath(); legendCtx.moveTo(lx, ly);
+                for(let i=0; i<30; i+=10) { legendCtx.lineTo(lx+i+5, ly + (i%20===0 ? -5:5)); }
+                legendCtx.lineTo(lx+30, ly); legendCtx.stroke();
+                const arrowSize = 8;
+                legendCtx.beginPath(); legendCtx.moveTo(lx + 40, ly);
+                legendCtx.lineTo(lx + 40 - arrowSize, ly - arrowSize / 2);
+                legendCtx.moveTo(lx + 40, ly);
+                legendCtx.lineTo(lx + 40 - arrowSize, ly + arrowSize / 2); legendCtx.stroke();
+            }});
+            sections.push(relationsSection);
+
+            const illnessesSection = { title: 'Patologías', items: [], twoColumns: true };
+            Object.keys(ILLNESSES).forEach(key => { illnessesSection.items.push({ label: ILLNESSES[key].label, draw: (lx, ly) => { legendCtx.fillStyle = ILLNESSES[key].color; legendCtx.fillRect(lx, ly - 8, 16, 16); }}); });
+            sections.push(illnessesSection);
+        
+            let currentX = PADDING; legendCtx.font = FONT;
+            sections.forEach(section => {
+                const titleWidth = legendCtx.measureText(section.title).width;
+                const itemsWidth = section.items.map(item => legendCtx.measureText(item.label).width);
+                let maxWidth = Math.max(titleWidth, ...itemsWidth);
+                if (section.twoColumns) {
+                    const half = Math.ceil(itemsWidth.length / 2);
+                    const col1W = Math.max(...itemsWidth.slice(0, half));
+                    const col2W = itemsWidth.length > half ? Math.max(...itemsWidth.slice(half)) : 0;
+                    maxWidth = col1W + col2W + 75; 
+                } else { maxWidth += 60; }
+                section.width = maxWidth; section.startX = currentX; currentX += maxWidth + SECTION_GAP;
+            });
+        
+            let totalHeight = 0;
+            sections.forEach(section => {
+                let currentY = PADDING;
+                legendCtx.font = TITLE_FONT; legendCtx.fillStyle = '#1f2937';
+                legendCtx.textAlign = 'left'; legendCtx.textBaseline = 'top';
+                legendCtx.fillText(section.title, section.startX, currentY);
+                currentY += ITEM_HEIGHT * 1.5;
+        
+                legendCtx.font = FONT;
+                if (section.twoColumns) {
+                    const half = Math.ceil(section.items.length / 2);
+                    const col1Items = section.items.slice(0, half), col2Items = section.items.slice(half);
+                    const col1Width = Math.max(...col1Items.map(item => legendCtx.measureText(item.label).width)) + 50;
+                    let y1 = currentY, y2 = currentY;
+                    col1Items.forEach(item => { item.draw(section.startX, y1 + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + 25, y1 + ITEM_HEIGHT / 2); y1 += ITEM_HEIGHT; });
+                    col2Items.forEach(item => { item.draw(section.startX + col1Width, y2 + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + col1Width + 25, y2 + ITEM_HEIGHT / 2); y2 += ITEM_HEIGHT; });
+                    currentY = Math.max(y1, y2);
+                } else {
+                    section.items.forEach(item => { item.draw(section.startX, currentY + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + 50, currentY + ITEM_HEIGHT / 2); currentY += ITEM_HEIGHT; });
+                }
+                totalHeight = Math.max(totalHeight, currentY);
+            });
+            return totalHeight + PADDING;
+        }
+
+        async function exportWithLegend(format) {
+            const legendCanvas = document.createElement('canvas');
+            const legendCtx = legendCanvas.getContext('2d');
+            const legendWidth = canvas.width < 1000 ? 1000 : canvas.width; // Min width for legend
+            
+            const legendHeight = drawLegendToCanvas(legendCtx, legendWidth);
+            legendCanvas.width = legendWidth; legendCanvas.height = legendHeight;
+            drawLegendToCanvas(legendCtx, legendWidth);
+
+            const combinedCanvas = document.createElement('canvas');
+            const combinedCtx = combinedCanvas.getContext('2d');
+            combinedCanvas.width = Math.max(canvas.width, legendWidth);
+            combinedCanvas.height = canvas.height + legendHeight;
+            
+            combinedCtx.fillStyle = '#f9fafb';
+            combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+            combinedCtx.drawImage(canvas, (combinedCanvas.width - canvas.width)/2, 0); // Center genogram
+            combinedCtx.drawImage(legendCanvas, (combinedCanvas.width - legendCanvas.width)/2, canvas.height); // Center legend
+
+            const imgData = combinedCanvas.toDataURL('image/png');
+
+            if (format === 'png') {
+                const a = document.createElement('a'); a.href = imgData; a.download = 'genograma-con-leyenda.png'; a.click();
+            } else if (format === 'pdf') {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: combinedCanvas.width > combinedCanvas.height ? 'landscape' : 'portrait',
+                    unit: 'px', format: [combinedCanvas.width, combinedCanvas.height]
+                });
+                pdf.addImage(imgData, 'PNG', 0, 0, combinedCanvas.width, combinedCanvas.height);
+                pdf.save('genograma-con-leyenda.pdf');
+            }
+        }
+        
+        exportPngBtn.addEventListener('click', () => exportWithLegend('png'));
+        exportPdfBtn.addEventListener('click', () => exportWithLegend('pdf'));
+
+        // --- Init ---
+        setupIllnessCheckboxes();
+        setupIllnessLegend();
+        setupSymbolLegend();
+        resizeCanvas();
+        updatePropertiesPanel();
+        saveState(); // Initial save for undo
+    </script>
+</body>
+</html>
