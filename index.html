@@ -918,19 +918,27 @@
 
         // Lógica del Menú
         openSidebarBtn.addEventListener('click', () => { sidebar.classList.add('open'); sidebarOverlay.classList.add('open'); });
-        closeSidebarBtn.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('open'); });
-        sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('open'); });
+        
+        const closeSidebar = () => {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('open');
+        }
+        closeSidebarBtn.addEventListener('click', closeSidebar);
+        sidebarOverlay.addEventListener('click', closeSidebar);
+        
         
         // ... (resto de listeners de botones, inputs, etc., sin cambios) ...
         window.addEventListener('resize', resizeCanvas);
         undoBtn.addEventListener('click', undo);
         redoBtn.addEventListener('click', redo);
-        addMaleBtn.addEventListener('click', () => { currentAction = 'addMale'; updateActiveButton(); });
-        addFemaleBtn.addEventListener('click', () => { currentAction = 'addFemale'; updateActiveButton(); });
-        addPetBtn.addEventListener('click', () => { currentAction = 'addPet'; updateActiveButton(); });
-        addLossBtn.addEventListener('click', () => { currentAction = 'addLoss'; updateActiveButton(); });
-        addAbortionBtn.addEventListener('click', () => { currentAction = 'addAbortion'; updateActiveButton(); });
-        addPregnancyBtn.addEventListener('click', () => { currentAction = 'addPregnancy'; updateActiveButton(); });
+
+        addMaleBtn.addEventListener('click', () => { currentAction = 'addMale'; updateActiveButton(); closeSidebar(); });
+        addFemaleBtn.addEventListener('click', () => { currentAction = 'addFemale'; updateActiveButton(); closeSidebar(); });
+        addPetBtn.addEventListener('click', () => { currentAction = 'addPet'; updateActiveButton(); closeSidebar(); });
+        addLossBtn.addEventListener('click', () => { currentAction = 'addLoss'; updateActiveButton(); closeSidebar(); });
+        addAbortionBtn.addEventListener('click', () => { currentAction = 'addAbortion'; updateActiveButton(); closeSidebar(); });
+        addPregnancyBtn.addEventListener('click', () => { currentAction = 'addPregnancy'; updateActiveButton(); closeSidebar(); });
+        
         addParentalLinkBtn.addEventListener('click', () => {
             if (multiSelection.length === 2) {
                 saveState();
@@ -951,11 +959,14 @@
                 updateActiveButton(); 
                 showToast('Selecciona a la primera persona.');
             }
+            closeSidebar();
         });
-        addHumanRelationBtn.addEventListener('click', () => { currentAction = 'humanRelation'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona a la primera persona.'); });
-        addChildBtn.addEventListener('click', () => { currentAction = 'addingChild'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al hijo/a.'); });
-        addIdenticalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'identical'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer gemelo.'); });
-        addFraternalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'fraternal'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer mellizo.'); });
+
+        addHumanRelationBtn.addEventListener('click', () => { currentAction = 'humanRelation'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona a la primera persona.'); closeSidebar(); });
+        addChildBtn.addEventListener('click', () => { currentAction = 'addingChild'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al hijo/a.'); closeSidebar(); });
+        addIdenticalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'identical'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer gemelo.'); closeSidebar(); });
+        addFraternalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'fraternal'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer mellizo.'); closeSidebar(); });
+        
         addCohabitationBtn.addEventListener('click', () => {
             if (multiSelection.length > 1) {
                 saveState();
@@ -967,6 +978,7 @@
                 showToast('Selecciona al menos a dos personas para marcar cohabitación.');
             }
             resetAction();
+            closeSidebar();
         });
         markIndexPatientBtn.addEventListener('click', () => {
             if (multiSelection.length === 1) {
@@ -980,6 +992,7 @@
                 showToast('Selecciona a una única persona para marcarla como paciente índice.');
             }
             resetAction();
+            closeSidebar();
         });
         nameInput.addEventListener('input', (e) => { if (multiSelection.length === 1) { saveState(); multiSelection[0].name = e.target.value; draw(); } });
         birthDateInput.addEventListener('input', (e) => { 
