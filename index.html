@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Genograma Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -10,15 +10,15 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            overscroll-behavior: none;
+            overscroll-behavior: none; /* Previene el "pull-to-refresh" en móviles */
         }
         .canvas-container {
             width: 100%;
             height: 100%;
             overflow: hidden;
+            touch-action: none; /* Deshabilita acciones táctiles del navegador como scroll */
         }
         canvas {
-            /* background-color: #f9fafb; */ /* Eliminado para que se dibuje en el canvas */
             cursor: default;
             display: block;
         }
@@ -50,18 +50,59 @@
         .property-section.active {
             display: block;
         }
+        /* Estilos para el panel lateral en móviles */
+        #sidebar {
+            transition: transform 0.3s ease-in-out;
+        }
+        @media (max-width: 768px) {
+            #sidebar {
+                transform: translateX(-100%);
+                position: fixed;
+                top: 0;
+                left: 0;
+                height: 100%;
+                z-index: 50;
+            }
+            #sidebar.open {
+                transform: translateX(0);
+            }
+            #sidebar-overlay {
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 40;
+            }
+             #sidebar-overlay.open {
+                display: block;
+            }
+        }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 flex h-screen">
+<body class="bg-gray-100 text-gray-800 flex h-screen overflow-hidden">
 
-    <!-- Panel de Herramientas Izquierdo --><aside class="w-80 bg-white shadow-lg p-6 flex flex-col space-y-6 overflow-y-auto">
+    <!-- Overlay para el menú en móviles -->
+    <div id="sidebar-overlay"></div>
+
+    <!-- Panel de Herramientas Izquierdo -->
+    <aside id="sidebar" class="w-80 bg-white shadow-lg p-6 flex flex-col space-y-6 overflow-y-auto">
+        <!-- Botón para cerrar en móvil -->
+        <button id="closeSidebarBtn" class="md:hidden absolute top-4 right-4 text-gray-500 hover:text-gray-800">
+            <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
         <div class="flex items-center space-x-3">
             <svg class="h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
             </svg>
             <h1 class="text-2xl font-bold text-gray-800">Genograma Pro</h1>
         </div>
-
+        
+        <!-- Contenido del panel... (el mismo de antes) -->
         <div class="border-t pt-6">
             <h2 class="text-lg font-semibold mb-4">Archivo</h2>
             <div class="grid grid-cols-2 gap-2">
@@ -236,26 +277,35 @@
 
          <div class="flex-grow"></div>
          <div class="text-xs text-gray-400 text-center">
-            <p>Rueda del mouse: Zoom. Clic derecho: Mover lienzo.</p>
+             <p class="hidden md:block">Rueda del mouse: Zoom. Clic derecho: Mover lienzo.</p>
+             <p class="md:hidden">Pellizca: Zoom. Arrastra: Mover lienzo.</p>
         </div>
     </aside>
 
-    
-
-<main class="flex-1 bg-gray-200 canvas-container">
+    <main class="flex-1 bg-gray-200 canvas-container relative">
+        <!-- Botón de menú para móvil -->
+        <button id="openSidebarBtn" class="md:hidden absolute top-4 left-4 z-10 bg-white p-2 rounded-full shadow-md">
+            <svg class="h-6 w-6 text-gray-800" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+        </button>
         <canvas id="genogramCanvas"></canvas>
     </main>
 
-    
-
-<div id="toast" class="toast fixed bottom-0 left-1/2 -translate-x-1/2 bg-gray-800 text-white py-2 px-5 rounded-full shadow-lg"></div>
+    <div id="toast" class="toast fixed bottom-0 left-1/2 -translate-x-1/2 bg-gray-800 text-white py-2 px-5 rounded-full shadow-lg z-50"></div>
 
     <script>
+        // --- El código JS se modifica para añadir los nuevos listeners y la lógica del menú --
         const canvas = document.getElementById('genogramCanvas');
         const ctx = canvas.getContext('2d');
         const container = canvas.parentElement;
 
         // --- UI Elements ---
+        const sidebar = document.getElementById('sidebar');
+        const openSidebarBtn = document.getElementById('openSidebarBtn');
+        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        // ... (resto de elementos UI como antes)
         const addMaleBtn = document.getElementById('addMaleBtn'), addFemaleBtn = document.getElementById('addFemaleBtn'),
               addPetBtn = document.getElementById('addPetBtn'), addLossBtn = document.getElementById('addLossBtn'),
               addAbortionBtn = document.getElementById('addAbortionBtn'), addPregnancyBtn = document.getElementById('addPregnancyBtn'),
@@ -278,7 +328,7 @@
               exportPdfBtn = document.getElementById('exportPdfBtn'),
               illnessLegend = document.getElementById('illnessLegend'),
               symbolLegend = document.getElementById('symbolLegend');
-
+              
         // --- App State ---
         let people = [], relationships = [], humanRelations = [], cohabitations = [], nextId = 1, currentAction = 'select', 
             multiSelection = [], selectedRelationship = null, selectedHumanRelation = null, selectedCohabitation = null, selectionBuffer = [], 
@@ -289,8 +339,13 @@
         
         let historyStack = [], redoStack = [];
         
-        // --- Viewport State (Pan & Zoom) ---
+        // --- Viewport State (Pan & Zoom & Touch) ---
         let scale = 1, panX = 0, panY = 0;
+        let initialPinchDistance = null;
+        let longPressTimeout = null;
+        let isTouchDragging = false;
+        let lastTouch = { x: 0, y: 0 };
+
 
         // --- Constants ---
         const NODE_SIZE = 60, FONT_SIZE = 14;
@@ -302,8 +357,10 @@
             addiction: { label: 'Adicciones', color: '#f59e0b' }, heart_disease: { label: 'Cardiopatía', color: '#be123c' },
             bipolarity: { label: 'Bipolaridad', color: '#84cc16' }, tea: { label: 'TEA', color: '#d946ef' },
         };
-
-        // --- UI Setup ---
+        
+        // --- Código de la app (funciones de dibujo, lógica, etc., sin cambios) ---
+        // Se omiten las funciones de dibujo y lógica que no cambian para brevedad.
+        // Las funciones como draw(), drawPersonShape(), etc., permanecen igual.
         function setupIllnessCheckboxes() {
             illnessCheckboxesContainer.innerHTML = Object.keys(ILLNESSES).map(key => `
                 <div class="flex items-center">
@@ -335,6 +392,7 @@
         // --- Utility & Coordinate Transformation ---
         function resizeCanvas() { canvas.width = container.clientWidth; canvas.height = container.clientHeight; draw(); }
         function getMousePos(evt) { const rect = canvas.getBoundingClientRect(); return { x: evt.clientX - rect.left, y: evt.clientY - rect.top }; }
+        function getTouchPos(touch) { const rect = canvas.getBoundingClientRect(); return { x: touch.clientX - rect.left, y: touch.clientY - rect.top }; }
         function screenToWorld(x, y) { return { x: (x - panX) / scale, y: (y - panY) / scale }; }
         function showToast(message) { toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 3000); }
         function updateActiveButton() {
@@ -393,17 +451,13 @@
             redoBtn.disabled = redoStack.length === 0;
         }
 
-
-        // --- Layout & Drawing ---
+        // --- Lógica de Dibujo (Omitida por brevedad, es la misma que antes) ---
         function draw() {
             ctx.save();
-            // Limpiar y establecer el fondo directamente en el canvas
             ctx.fillStyle = '#f9fafb';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             ctx.translate(panX, panY);
             ctx.scale(scale, scale);
-            
             relationships.forEach(drawRelationship);
             humanRelations.forEach(drawHumanRelation);
             cohabitations.forEach(drawCohabitation);
@@ -411,7 +465,6 @@
                 drawPersonShape(person);
                 drawPersonText(person);
             });
-
             if (isSelecting) {
                 ctx.fillStyle = 'rgba(0, 120, 255, 0.2)';
                 ctx.strokeStyle = 'rgba(0, 120, 255, 0.8)';
@@ -419,10 +472,10 @@
                 ctx.fillRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
                 ctx.strokeRect(selectionRect.x, selectionRect.y, selectionRect.w, selectionRect.h);
             }
-
             ctx.restore();
         }
         
+        // ... Todas las funciones drawPersonShape, drawRelationship, etc. van aquí ...
         function drawPersonShape(person) {
             ctx.fillStyle = '#f9fafb';
             
@@ -499,10 +552,8 @@
                 ctx.stroke();
             }
         }
-
         function drawPersonText(person) {
             const age = person.age;
-
             if (age && !['abortion', 'loss', 'pregnancy'].includes(person.gender)) {
                 ctx.font = `700 ${FONT_SIZE}px Inter`;
                 const ageText = age.toString();
@@ -513,9 +564,7 @@
                 ctx.textAlign = 'center';
                 ctx.fillText(ageText, person.x, person.y + FONT_SIZE / 3);
             }
-
             const yOffset = (['loss', 'abortion'].includes(person.gender)) ? (NODE_SIZE / 4) + 15 : NODE_SIZE/2 + FONT_SIZE + 5;
-            
             ctx.font = `500 ${FONT_SIZE}px Inter`; ctx.textAlign = 'center';
             const nameText = person.name;
             if (nameText) {
@@ -526,7 +575,6 @@
                 ctx.fillStyle = '#1f2937';
                 ctx.fillText(nameText, person.x, nameY);
             }
-
             const dates = [person.birthDate, person.deathDate].filter(Boolean).join('-');
             if (dates) {
                 const datesY = person.y + yOffset + (nameText ? FONT_SIZE + 2 : 0);
@@ -538,12 +586,9 @@
                 ctx.fillText(dates, person.x, datesY);
             }
         }
-
-
         function drawIllnesses(person) {
             const allIllnessKeys = Object.keys(ILLNESSES);
             const radius = NODE_SIZE / 2;
-        
             ctx.save();
             ctx.beginPath();
             if (person.gender === 'male' || person.gender === 'pregnancy') {
@@ -552,36 +597,17 @@
                 ctx.arc(person.x, person.y, radius, 0, Math.PI * 2);
             }
             ctx.clip(); 
-        
             if (person.gender === 'male' || person.gender === 'pregnancy') {
                 const center = { x: person.x, y: person.y };
                 const r = radius;
-                // NEW: Define 12 points around the square for up to 12 slices
-                const points = [
-                    { x: person.x - r, y: person.y - r },     // TL corner
-                    { x: person.x - r/3, y: person.y - r },   // Top 1/3
-                    { x: person.x + r/3, y: person.y - r },   // Top 2/3
-                    { x: person.x + r, y: person.y - r },     // TR corner
-                    { x: person.x + r, y: person.y - r/3 },   // Right 1/3
-                    { x: person.x + r, y: person.y + r/3 },   // Right 2/3
-                    { x: person.x + r, y: person.y + r },     // BR corner
-                    { x: person.x + r/3, y: person.y + r },   // Bottom 2/3
-                    { x: person.x - r/3, y: person.y + r },   // Bottom 1/3
-                    { x: person.x - r, y: person.y + r },     // BL corner
-                    { x: person.x - r, y: person.y + r/3 },   // Left 2/3
-                    { x: person.x - r, y: person.y - r/3 }    // Left 1/3
-                ];
-                
-                // NEW: Create triangles dynamically from the points
+                const points = [ { x: person.x - r, y: person.y - r }, { x: person.x - r/3, y: person.y - r }, { x: person.x + r/3, y: person.y - r }, { x: person.x + r, y: person.y - r }, { x: person.x + r, y: person.y - r/3 }, { x: person.x + r, y: person.y + r/3 }, { x: person.x + r, y: person.y + r }, { x: person.x + r/3, y: person.y + r }, { x: person.x - r/3, y: person.y + r }, { x: person.x - r, y: person.y + r }, { x: person.x - r, y: person.y + r/3 }, { x: person.x - r, y: person.y - r/3 } ];
                 const triangles = [];
                 for (let i = 0; i < points.length; i++) {
                     triangles.push([center, points[i], points[(i + 1) % points.length]]);
                 }
-        
                 person.illnesses.forEach(illnessKey => {
                     const index = allIllnessKeys.indexOf(illnessKey);
                     if (index === -1 || index >= triangles.length) return;
-        
                     const triangle = triangles[index];
                     ctx.fillStyle = ILLNESSES[illnessKey].color;
                     ctx.beginPath();
@@ -591,14 +617,12 @@
                     ctx.closePath();
                     ctx.fill();
                 });
-
             } else { // Female or other circular shapes
                 const anglePerSlice = (2 * Math.PI) / allIllnessKeys.length;
                 const sliceOffset = -Math.PI / 2;
                 person.illnesses.forEach(illnessKey => {
                     const index = allIllnessKeys.indexOf(illnessKey);
                     if (index === -1) return;
-        
                     ctx.fillStyle = ILLNESSES[illnessKey].color;
                     ctx.beginPath();
                     ctx.moveTo(person.x, person.y);
@@ -611,39 +635,27 @@
             }
             ctx.restore();
         }
-
         function drawRelationship(rel) {
             const p1 = people.find(p => p.id === rel.p1_id);
             const p2 = rel.p2_id ? people.find(p => p.id === rel.p2_id) : null;
             if (!p1) return;
-
-            // --- DELETED: Vertical offset logic removed ---
-
             let mainStrokeStyle = '#4b5563';
             if (rel === selectedRelationship) mainStrokeStyle = '#2563eb';
-            
             ctx.lineWidth = 2 / scale;
-            
             const p1Bottom = p1.y + NODE_SIZE / 2;
             let partnerLinkY;
             let parentsMidX;
-
-            // --- Parte 1: Dibujar conexiones de los padres ---
-            if (p2) { // Dos padres
+            if (p2) {
                 if (rel.status === 'separated' || rel.status === 'divorced') mainStrokeStyle = '#ef4444';
                 ctx.strokeStyle = mainStrokeStyle;
-
                 const p2Bottom = p2.y + NODE_SIZE / 2;
                 partnerLinkY = Math.max(p1Bottom, p2Bottom) + LINE_SPACING_VERTICAL;
-
                 ctx.beginPath(); ctx.moveTo(p1.x, p1Bottom); ctx.lineTo(p1.x, partnerLinkY); ctx.stroke();
                 ctx.beginPath(); ctx.moveTo(p2.x, p2Bottom); ctx.lineTo(p2.x, partnerLinkY); ctx.stroke();
-                
                 ctx.setLineDash([]);
                 if(rel.status === 'unmarried') ctx.setLineDash([10 / scale, 5 / scale]);
                 ctx.beginPath(); ctx.moveTo(p1.x, partnerLinkY); ctx.lineTo(p2.x, partnerLinkY); ctx.stroke();
                 ctx.setLineDash([]);
-
                 if (rel.status === 'separated' || rel.status === 'divorced') {
                     const midX = (p1.x + p2.x) / 2;
                     ctx.save();
@@ -653,26 +665,20 @@
                     ctx.restore();
                 }
                 parentsMidX = (p1.x + p2.x) / 2;
-            } else { // Padre/madre soltero/a
+            } else {
                 ctx.strokeStyle = mainStrokeStyle;
                 partnerLinkY = p1Bottom + LINE_SPACING_VERTICAL / 2;
                 parentsMidX = p1.x;
                 ctx.beginPath(); ctx.moveTo(p1.x, p1Bottom); ctx.lineTo(p1.x, partnerLinkY); ctx.stroke();
             }
-
-            // --- Parte 2: Dibujar conexiones de los hijos ---
             const children = rel.children_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
             if (children.length === 0) return;
-
             ctx.strokeStyle = '#4b5563';
             const horizontalChildLineY = partnerLinkY + LINE_SPACING_VERTICAL;
-            
             ctx.beginPath(); ctx.moveTo(parentsMidX, partnerLinkY); ctx.lineTo(parentsMidX, horizontalChildLineY); ctx.stroke();
-
             const allTwinIds = rel.twinGroups.flatMap(g => g.ids);
             const nonTwins = children.filter(c => !allTwinIds.includes(c.id));
             const attachmentPoints = [parentsMidX];
-            
             nonTwins.forEach(child => attachmentPoints.push(child.x));
             rel.twinGroups.forEach(group => {
                 const groupPeople = group.ids.map(id => people.find(p => p.id === id)).filter(Boolean);
@@ -680,42 +686,37 @@
                     attachmentPoints.push(groupPeople.reduce((sum, p) => sum + p.x, 0) / groupPeople.length);
                 }
             });
-
             if(attachmentPoints.length > 0) {
                  ctx.beginPath();
                  ctx.moveTo(Math.min(...attachmentPoints), horizontalChildLineY);
                  ctx.lineTo(Math.max(...attachmentPoints), horizontalChildLineY);
                  ctx.stroke();
             }
-            
             nonTwins.forEach(child => {
                 ctx.setLineDash([]);
                 if (child.isAdopted) {
-                    ctx.setLineDash([2 / scale, 4 / scale]); // Dotted line
+                    ctx.setLineDash([2 / scale, 4 / scale]);
                 }
                 const nodeRadius = (['loss', 'abortion'].includes(child.gender)) ? NODE_SIZE/4 : (child.gender === 'pregnancy' ? NODE_SIZE/2.5 : NODE_SIZE/2);
                 const yEnd = child.y - nodeRadius;
                 ctx.beginPath(); ctx.moveTo(child.x, horizontalChildLineY); ctx.lineTo(child.x, yEnd); ctx.stroke();
                 ctx.setLineDash([]);
             });
-
             rel.twinGroups.forEach(group => {
                 const t1 = people.find(p => p.id === group.ids[0]);
                 const t2 = people.find(p => p.id === group.ids[1]);
                 if (!t1 || !t2) return;
-                
                 ctx.setLineDash([]);
                 ctx.strokeStyle = '#4b5563';
                 const midPointX = (t1.x + t2.x) / 2;
                 const yEnd1 = t1.y - NODE_SIZE / 2;
                 const yEnd2 = t2.y - NODE_SIZE / 2;
                 const junctionY = Math.min(yEnd1, yEnd2) - 20;
-
-                if (group.type === 'fraternal') { // Mellizos
+                if (group.type === 'fraternal') {
                     ctx.beginPath(); ctx.moveTo(midPointX, horizontalChildLineY); ctx.lineTo(midPointX, junctionY); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(midPointX, junctionY); ctx.lineTo(t1.x, yEnd1); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(midPointX, junctionY); ctx.lineTo(t2.x, yEnd2); ctx.stroke();
-                } else { // 'identical' - Gemelos
+                } else {
                     const triBaseY = junctionY;
                     const triTopY = triBaseY - 15;
                     ctx.beginPath();
@@ -731,17 +732,13 @@
                 }
             });
         }
-
         function drawHumanRelation(rel) {
             const p1 = people.find(p => p.id === rel.p1_id), p2 = people.find(p => p.id === rel.p2_id);
             if (!p1 || !p2) return;
-
             ctx.lineWidth = 2 / scale;
             let strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#4b5563';
-            
             const offset = 5 / scale;
             ctx.setLineDash([]);
-            
             const dx = p2.x - p1.x;
             const dy = p2.y - p1.y;
             const dist = Math.sqrt(dx*dx + dy*dy);
@@ -749,116 +746,22 @@
             const midX = (p1.x + p2.x) / 2;
             const midY = (p1.y + p2.y) / 2;
             let hasStroked = false;
-
             ctx.beginPath();
             switch (rel.type) {
-                case 'distante':
-                    ctx.setLineDash([2 / scale, 4 / scale]);
-                    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-                    break;
-                case 'cercana':
-                    strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#10b981';
-                    ctx.moveTo(p1.x - dy/dist * offset, p1.y + dx/dist * offset); 
-                    ctx.lineTo(p2.x - dy/dist * offset, p2.y + dx/dist * offset);
-                    ctx.moveTo(p1.x + dy/dist * offset, p1.y - dx/dist * offset);
-                    ctx.lineTo(p2.x + dy/dist * offset, p2.y - dx/dist * offset);
-                    break;
-                case 'estrecha':
-                    ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-                    ctx.moveTo(p1.x - dy/dist * offset, p1.y + dx/dist * offset); 
-                    ctx.lineTo(p2.x - dy/dist * offset, p2.y + dx/dist * offset);
-                    ctx.moveTo(p1.x + dy/dist * offset, p1.y - dx/dist * offset);
-                    ctx.lineTo(p2.x + dy/dist * offset, p2.y - dx/dist * offset);
-                    break;
-                case 'conflictiva':
-                    const amplitude = 8 / scale;
-                    const segments = Math.hypot(p2.x-p1.x, p2.y-p1.y) / 15;
-                    ctx.moveTo(p1.x, p1.y);
-                    for (let i = 0; i <= segments; i++) {
-                        const progress = i / segments;
-                        const x = p1.x + dx * progress;
-                        const y = p1.y + dy * progress;
-                        const perpAngle = Math.atan2(dy, dx) + Math.PI / 2;
-                        const zigZagOffset = (i % 2 === 0 ? 1 : -1) * amplitude * Math.sin(progress * Math.PI);
-                        ctx.lineTo(x + Math.cos(perpAngle) * zigZagOffset, y + Math.sin(perpAngle) * zigZagOffset);
-                    }
-                    break;
-                case 'abuso':
-                    strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#3b82f6';
-                    ctx.strokeStyle = strokeStyle;
-                    ctx.fillStyle = strokeStyle;
-
-                    const angle = Math.atan2(dy, dx);
-                    const arrowSize = 12 / scale;
-                    // Punto final de la línea en zigzag, antes de la flecha
-                    const endX = p2.x - Math.cos(angle) * (NODE_SIZE / 2 + arrowSize);
-                    const endY = p2.y - Math.sin(angle) * (NODE_SIZE / 2 + arrowSize);
-
-                    // Draw jagged line
-                    ctx.beginPath();
-                    const ampAbuse = 8 / scale;
-                    const endDx = endX - p1.x;
-                    const endDy = endY - p1.y;
-                    const segsAbuse = Math.hypot(endDx, endDy) / 15;
-                    
-                    ctx.moveTo(p1.x, p1.y);
-                    for (let i = 0; i <= segsAbuse; i++) {
-                        const progress = i / segsAbuse;
-                        const x = p1.x + endDx * progress;
-                        const y = p1.y + endDy * progress;
-                        const perpAngle = Math.atan2(endDy, endDx) + Math.PI / 2;
-                        const zigZagOffset = (i % 2 === 0 ? 1 : -1) * ampAbuse * Math.sin(progress * Math.PI);
-                        ctx.lineTo(x + Math.cos(perpAngle) * zigZagOffset, y + Math.sin(perpAngle) * zigZagOffset);
-                    }
-                     ctx.stroke();
-
-
-                    // Draw arrow at the end of the jagged line
-                    ctx.save();
-                    ctx.translate(endX, endY);
-                    ctx.rotate(angle);
-                    ctx.beginPath();
-                    ctx.moveTo(0, 0);
-                    ctx.lineTo(-arrowSize, -arrowSize / 2);
-                    ctx.lineTo(-arrowSize, arrowSize / 2);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.restore();
-                    
-                    hasStroked = true;
-                    break;
-                case 'rota':
-                    const ratio = 10 / dist;
-                    ctx.moveTo(p1.x, p1.y); ctx.lineTo(midX - dx * ratio, midY - dy * ratio);
-                    ctx.moveTo(p2.x, p2.y); ctx.lineTo(midX + dx * ratio, midY + dy * ratio);
-                    ctx.stroke(); 
-                    ctx.beginPath();
-                    ctx.save();
-                    ctx.translate(midX - dx * ratio * 0.5, midY - dy * ratio * 0.5);
-                    ctx.rotate(Math.atan2(dy, dx)); 
-                    ctx.moveTo(0, -8); ctx.lineTo(0, 8);
-                    ctx.restore();
-                    ctx.save();
-                    ctx.translate(midX + dx * ratio * 0.5, midY + dy * ratio * 0.5);
-                    ctx.rotate(Math.atan2(dy, dx)); 
-                    ctx.moveTo(0, -8); ctx.lineTo(0, 8);
-                    ctx.restore();
-                    break; 
+                case 'distante': ctx.setLineDash([2 / scale, 4 / scale]); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); break;
+                case 'cercana': strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#10b981'; ctx.moveTo(p1.x - dy/dist * offset, p1.y + dx/dist * offset); ctx.lineTo(p2.x - dy/dist * offset, p2.y + dx/dist * offset); ctx.moveTo(p1.x + dy/dist * offset, p1.y - dx/dist * offset); ctx.lineTo(p2.x + dy/dist * offset, p2.y - dx/dist * offset); break;
+                case 'estrecha': ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.moveTo(p1.x - dy/dist * offset, p1.y + dx/dist * offset); ctx.lineTo(p2.x - dy/dist * offset, p2.y + dx/dist * offset); ctx.moveTo(p1.x + dy/dist * offset, p1.y - dx/dist * offset); ctx.lineTo(p2.x + dy/dist * offset, p2.y - dx/dist * offset); break;
+                case 'conflictiva': const amplitude = 8 / scale; const segments = Math.hypot(p2.x-p1.x, p2.y-p1.y) / 15; ctx.moveTo(p1.x, p1.y); for (let i = 0; i <= segments; i++) { const progress = i / segments; const x = p1.x + dx * progress; const y = p1.y + dy * progress; const perpAngle = Math.atan2(dy, dx) + Math.PI / 2; const zigZagOffset = (i % 2 === 0 ? 1 : -1) * amplitude * Math.sin(progress * Math.PI); ctx.lineTo(x + Math.cos(perpAngle) * zigZagOffset, y + Math.sin(perpAngle) * zigZagOffset); } break;
+                case 'abuso': strokeStyle = (rel === selectedHumanRelation) ? '#2563eb' : '#3b82f6'; ctx.strokeStyle = strokeStyle; ctx.fillStyle = strokeStyle; const angle = Math.atan2(dy, dx); const arrowSize = 12 / scale; const endX = p2.x - Math.cos(angle) * (NODE_SIZE / 2 + arrowSize); const endY = p2.y - Math.sin(angle) * (NODE_SIZE / 2 + arrowSize); ctx.beginPath(); const ampAbuse = 8 / scale; const endDx = endX - p1.x; const endDy = endY - p1.y; const segsAbuse = Math.hypot(endDx, endDy) / 15; ctx.moveTo(p1.x, p1.y); for (let i = 0; i <= segsAbuse; i++) { const progress = i / segsAbuse; const x = p1.x + endDx * progress; const y = p1.y + endDy * progress; const perpAngle = Math.atan2(endDy, endDx) + Math.PI / 2; const zigZagOffset = (i % 2 === 0 ? 1 : -1) * ampAbuse * Math.sin(progress * Math.PI); ctx.lineTo(x + Math.cos(perpAngle) * zigZagOffset, y + Math.sin(perpAngle) * zigZagOffset); } ctx.stroke(); ctx.save(); ctx.translate(endX, endY); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-arrowSize, -arrowSize / 2); ctx.lineTo(-arrowSize, arrowSize / 2); ctx.closePath(); ctx.fill(); ctx.restore(); hasStroked = true; break;
+                case 'rota': const ratio = 10 / dist; ctx.moveTo(p1.x, p1.y); ctx.lineTo(midX - dx * ratio, midY - dy * ratio); ctx.moveTo(p2.x, p2.y); ctx.lineTo(midX + dx * ratio, midY + dy * ratio); ctx.stroke(); ctx.beginPath(); ctx.save(); ctx.translate(midX - dx * ratio * 0.5, midY - dy * ratio * 0.5); ctx.rotate(Math.atan2(dy, dx)); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.restore(); ctx.save(); ctx.translate(midX + dx * ratio * 0.5, midY + dy * ratio * 0.5); ctx.rotate(Math.atan2(dy, dx)); ctx.moveTo(0, -8); ctx.lineTo(0, 8); ctx.restore(); break; 
             }
-            if (!hasStroked) {
-                ctx.strokeStyle = strokeStyle;
-                ctx.stroke();
-            }
+            if (!hasStroked) { ctx.strokeStyle = strokeStyle; ctx.stroke(); }
             ctx.setLineDash([]);
         }
-
-
         function drawCohabitation(cohabitation) {
             if (cohabitation.person_ids.length < 2) return;
-
             const cohabitingPeople = cohabitation.person_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
             if (cohabitingPeople.length === 0) return;
-
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             cohabitingPeople.forEach(p => {
                 minX = Math.min(minX, p.x - NODE_SIZE / 2);
@@ -866,27 +769,23 @@
                 maxX = Math.max(maxX, p.x + NODE_SIZE / 2);
                 maxY = Math.max(maxY, p.y + NODE_SIZE / 2);
             });
-
-            const padding = 20; // Padding around the group
+            const padding = 20;
             minX -= padding; minY -= padding;
             maxX += padding; maxY += padding;
-
             ctx.strokeStyle = '#4b5563';
             ctx.lineWidth = 1.5 / scale;
-            ctx.setLineDash([5 / scale, 5 / scale]); // Dashed line
-            
+            ctx.setLineDash([5 / scale, 5 / scale]);
             if (cohabitation === selectedCohabitation) {
                 ctx.strokeStyle = '#2563eb';
                 ctx.lineWidth = 3 / scale;
             }
-
             ctx.beginPath();
             ctx.rect(minX, minY, maxX - minX, maxY - minY);
             ctx.stroke();
-            ctx.setLineDash([]); // Reset line dash
+            ctx.setLineDash([]);
         }
-
-        // --- Core App Logic ---
+        
+        // --- Core App Logic (Omitida por brevedad) ---
         function addPerson(x, y, gender) {
             const isEvent = ['loss', 'abortion', 'pregnancy'].includes(gender);
             const person = { 
@@ -903,7 +802,6 @@
             draw();
         }
         function getPersonAt(worldX, worldY) { return people.slice().reverse().find(p => Math.sqrt((worldX-p.x)**2 + (worldY-p.y)**2) < NODE_SIZE/2) || null; }
-        
         function getRelationshipAt(worldX, worldY) {
             for (const rel of relationships) {
                 const p1 = people.find(p=>p.id===rel.p1_id), p2 = people.find(p=>p.id===rel.p2_id);
@@ -915,13 +813,11 @@
             } 
             return null;
         }
-
         function getHumanRelationAt(worldX, worldY) {
              for (const rel of humanRelations) {
                 const p1 = people.find(p => p.id === rel.p1_id);
                 const p2 = people.find(p => p.id === rel.p2_id);
                 if (!p1 || !p2) continue;
-
                 const dx = p2.x - p1.x, dy = p2.y - p1.y;
                 const lenSq = dx * dx + dy * dy;
                 if (lenSq === 0) continue;
@@ -932,21 +828,17 @@
             }
             return null;
         }
-
         function getCohabitationAt(worldX, worldY) {
             for (const cohabitation of cohabitations) {
                 const cohabitingPeople = cohabitation.person_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
                 if (cohabitingPeople.length < 2) continue;
-
                 let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                 cohabitingPeople.forEach(p => {
                     minX = Math.min(minX, p.x - NODE_SIZE / 2); minY = Math.min(minY, p.y - NODE_SIZE / 2);
                     maxX = Math.max(maxX, p.x + NODE_SIZE / 2); maxY = Math.max(maxY, p.y + NODE_SIZE / 2);
                 });
-
                 const padding = 20; minX -= padding; minY -= padding; maxX += padding; maxY += padding;
                 const tolerance = 10 / scale;
-
                 if (worldY >= minY - tolerance && worldY <= minY + tolerance && worldX >= minX - tolerance && worldX <= maxX + tolerance) return cohabitation;
                 if (worldY >= maxY - tolerance && worldY <= maxY + tolerance && worldX >= minX - tolerance && worldX <= maxX + tolerance) return cohabitation;
                 if (worldX >= minX - tolerance && worldX <= minX + tolerance && worldY >= minY - tolerance && worldY <= maxY + tolerance) return cohabitation;
@@ -954,8 +846,6 @@
             }
             return null;
         }
-
-
         function updatePropertiesPanel() {
             const hasMultiSelection = multiSelection.length > 1;
             personProperties.classList.toggle('active', multiSelection.length === 1 && !hasMultiSelection);
@@ -970,7 +860,6 @@
                 birthDateInput.value = person.birthDate;
                 deathDateInput.value = person.deathDate;
                 ageInput.value = person.age;
-                
                 isAdoptedCheckbox.checked = person.isAdopted;
                 document.querySelectorAll('#illnessCheckboxes input').forEach(chk => chk.checked = person.illnesses.includes(chk.dataset.illness));
             } else if (selectedRelationship) { 
@@ -984,7 +873,6 @@
         function selectHumanRelation(rel) { selectedHumanRelation=rel; multiSelection=[]; selectedRelationship=null; selectedCohabitation=null; updatePropertiesPanel(); draw(); }
         function selectCohabitation(coh) { selectedCohabitation=coh; multiSelection=[]; selectedRelationship=null; selectedHumanRelation=null; updatePropertiesPanel(); draw(); }
         function deselectAll() { multiSelection=[]; selectedRelationship=null; selectedHumanRelation=null; selectedCohabitation=null; updatePropertiesPanel(); draw(); }
-        
         function reorderAndPositionSiblings(rel) {
             const children = rel.children_ids.map(id => people.find(p => p.id === id)).filter(Boolean);
             if (children.length < 2) return;
@@ -997,30 +885,24 @@
             rel.children_ids = [];
             children.forEach(child => { child.x = currentX; child.y = avgY; currentX += gap; rel.children_ids.push(child.id); });
         }
-        
         function deleteSelection() {
             if (multiSelection.length > 0 || selectedRelationship || selectedHumanRelation || selectedCohabitation) {
                 saveState();
             }
-
             if (multiSelection.length > 0) {
                 const idsToDelete = new Set(multiSelection.map(p => p.id));
                 const relsToReorder = new Set();
-        
                 relationships.forEach(rel => {
                     const childrenBefore = rel.children_ids.length;
                     rel.children_ids = rel.children_ids.filter(id => !idsToDelete.has(id));
                     if(rel.children_ids.length < childrenBefore && rel.children_ids.length > 0) relsToReorder.add(rel);
                     rel.twinGroups = rel.twinGroups.filter(group => !group.ids.some(id => idsToDelete.has(id)));
                 });
-        
                 people = people.filter(p => !idsToDelete.has(p.id));
                 relationships = relationships.filter(rel => !idsToDelete.has(rel.p1_id) && !idsToDelete.has(rel.p2_id));
                 humanRelations = humanRelations.filter(rel => !idsToDelete.has(rel.p1_id) && !idsToDelete.has(rel.p2_id));
                 cohabitations = cohabitations.filter(coh => !coh.person_ids.some(id => idsToDelete.has(id)));
-                
                 relsToReorder.forEach(rel => reorderAndPositionSiblings(rel));
-        
             } else if (selectedRelationship) {
                 relationships = relationships.filter(r => r.id !== selectedRelationship.id);
             } else if (selectedHumanRelation) {
@@ -1028,12 +910,18 @@
             } else if (selectedCohabitation) {
                 cohabitations = cohabitations.filter(c => c.id !== selectedCohabitation.id);
             }
-            
             deselectAll();
             draw();
         }
 
-        // --- Event Handlers ---
+        // --- Event Handlers (Desktop & Mobile) ---
+
+        // Lógica del Menú
+        openSidebarBtn.addEventListener('click', () => { sidebar.classList.add('open'); sidebarOverlay.classList.add('open'); });
+        closeSidebarBtn.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('open'); });
+        sidebarOverlay.addEventListener('click', () => { sidebar.classList.remove('open'); sidebarOverlay.classList.remove('open'); });
+        
+        // ... (resto de listeners de botones, inputs, etc., sin cambios) ...
         window.addEventListener('resize', resizeCanvas);
         undoBtn.addEventListener('click', undo);
         redoBtn.addEventListener('click', redo);
@@ -1043,15 +931,11 @@
         addLossBtn.addEventListener('click', () => { currentAction = 'addLoss'; updateActiveButton(); });
         addAbortionBtn.addEventListener('click', () => { currentAction = 'addAbortion'; updateActiveButton(); });
         addPregnancyBtn.addEventListener('click', () => { currentAction = 'addPregnancy'; updateActiveButton(); });
-        
         addParentalLinkBtn.addEventListener('click', () => {
             if (multiSelection.length === 2) {
                 saveState();
                 const [p1, p2] = multiSelection;
-                const existingLink = relationships.find(r => 
-                    r.p2_id && ((r.p1_id === p1.id && r.p2_id === p2.id) || (r.p1_id === p2.id && r.p2_id === p1.id))
-                );
-
+                const existingLink = relationships.find(r => r.p2_id && ((r.p1_id === p1.id && r.p2_id === p2.id) || (r.p1_id === p2.id && r.p2_id === p1.id)));
                 if (!existingLink) {
                     const newRel = { id: nextId++, p1_id: p1.id, p2_id: p2.id, children_ids: [], twinGroups: [], status: 'married'};
                     relationships.push(newRel);
@@ -1068,12 +952,10 @@
                 showToast('Selecciona a la primera persona.');
             }
         });
-
         addHumanRelationBtn.addEventListener('click', () => { currentAction = 'humanRelation'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona a la primera persona.'); });
         addChildBtn.addEventListener('click', () => { currentAction = 'addingChild'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al hijo/a.'); });
         addIdenticalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'identical'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer gemelo.'); });
         addFraternalTwinsBtn.addEventListener('click', () => { currentAction = 'markingTwins'; twinMarkingType = 'fraternal'; selectionBuffer = []; updateActiveButton(); showToast('Selecciona al primer mellizo.'); });
-
         addCohabitationBtn.addEventListener('click', () => {
             if (multiSelection.length > 1) {
                 saveState();
@@ -1099,7 +981,6 @@
             }
             resetAction();
         });
-        
         nameInput.addEventListener('input', (e) => { if (multiSelection.length === 1) { saveState(); multiSelection[0].name = e.target.value; draw(); } });
         birthDateInput.addEventListener('input', (e) => { 
             if (multiSelection.length === 1) { 
@@ -1117,7 +998,6 @@
         isAdoptedCheckbox.addEventListener('change', (e) => {
             if (multiSelection.length === 1) { saveState(); multiSelection[0].isAdopted = e.target.checked; draw(); }
         });
-
         deletePersonBtn.addEventListener('click', deleteSelection);
         deleteParentalLinkBtn.addEventListener('click', deleteSelection);
         deleteHumanRelationBtn.addEventListener('click', deleteSelection);
@@ -1129,7 +1009,6 @@
                 if (document.activeElement.tagName.toUpperCase() !== 'INPUT') { e.preventDefault(); deleteSelection(); }
             }
         });
-
         illnessCheckboxesContainer.addEventListener('change', (e) => {
             if (e.target.type === 'checkbox' && multiSelection.length === 1) {
                 saveState();
@@ -1141,16 +1020,9 @@
         });
         parentalStatusSelect.addEventListener('change', (e) => { if (selectedRelationship) { saveState(); selectedRelationship.status = e.target.value; draw(); } });
         humanRelationSelect.addEventListener('change', (e) => { if (selectedHumanRelation) { saveState(); selectedHumanRelation.type = e.target.value; draw(); } });
-
-        canvas.addEventListener('mousedown', (e) => {
-            const mousePos = getMousePos(e);
-            const worldPos = screenToWorld(mousePos.x, mousePos.y);
-
-            if (e.button === 1 || e.button === 2) {
-                isPanning = true; panStartX = mousePos.x; panStartY = mousePos.y;
-                canvas.style.cursor = 'grabbing'; e.preventDefault(); return;
-            }
-
+        
+        // --- Shared Interaction Logic ---
+        function handlePointerDown(worldPos, isShift) {
             let targetPerson = getPersonAt(worldPos.x, worldPos.y);
             const targetRel = targetPerson ? null : getRelationshipAt(worldPos.x, worldPos.y);
             const targetCohabitation = targetPerson || targetRel ? null : getCohabitationAt(worldPos.x, worldPos.y);
@@ -1163,94 +1035,15 @@
                 case 'addLoss': addPerson(worldPos.x, worldPos.y, 'loss'); return;
                 case 'addAbortion': addPerson(worldPos.x, worldPos.y, 'abortion'); return;
                 case 'addPregnancy': addPerson(worldPos.x, worldPos.y, 'pregnancy'); return;
-                case 'parentalLink':
-                    if (targetPerson) {
-                        selectionBuffer.push(targetPerson);
-                        if (selectionBuffer.length === 1) showToast('Selecciona a la segunda persona.');
-                        else if (selectionBuffer.length === 2) {
-                            saveState();
-                            relationships.push({ id: nextId++, p1_id: selectionBuffer[0].id, p2_id: selectionBuffer[1].id, children_ids: [], twinGroups: [], status: 'married'});
-                            resetAction(); showToast('Vínculo creado.');
-                        }
-                    } draw(); return;
-                case 'humanRelation':
-                    if (targetPerson) {
-                        selectionBuffer.push(targetPerson);
-                        if (selectionBuffer.length === 1) showToast('Selecciona a la segunda persona.');
-                        else if (selectionBuffer.length === 2) {
-                            saveState();
-                            humanRelations.push({ id: nextId++, p1_id: selectionBuffer[0].id, p2_id: selectionBuffer[1].id, type: 'cercana'});
-                            resetAction(); showToast('Relación creada.');
-                        }
-                    } draw(); return;
-                case 'addingChild':
-                    if (selectionBuffer.length === 0 && targetPerson) { 
-                        selectionBuffer.push(targetPerson); 
-                        showToast('Ahora, haz clic en un padre/madre o en un vínculo de pareja.');
-                        draw(); return;
-                    } 
-                    if (selectionBuffer.length === 1) {
-                        const child = selectionBuffer[0];
-                        const targetParent = targetPerson;
-                        const targetRel = getRelationshipAt(worldPos.x, worldPos.y);
-                        if (!targetParent && !targetRel) return;
-                        if (targetParent && targetParent.id === child.id) { showToast('No se puede vincular a una persona consigo misma.'); return; }
-                        saveState();
-                        relationships.forEach(r => r.children_ids = r.children_ids.filter(id => id !== child.id));
-                        relationships = relationships.filter(r => !(r.p2_id === null && r.children_ids.length === 0));
-                        if (targetRel) {
-                            if(!targetRel.children_ids.includes(child.id)) {
-                                targetRel.children_ids.push(child.id); showToast(`${child.name} añadido/a como hijo/a.`);
-                            }
-                            reorderAndPositionSiblings(targetRel);
-                        } else if (targetParent) {
-                             const existingRel = relationships.find(r => r.p1_id === targetParent.id || r.p2_id === targetParent.id);
-                             if (existingRel) {
-                                if(!existingRel.children_ids.includes(child.id)) {
-                                    existingRel.children_ids.push(child.id);
-                                    showToast(`${child.name} añadido/a como hijo/a de ${targetParent.name}.`);
-                                }
-                                reorderAndPositionSiblings(existingRel);
-                             } else {
-                                const newRel = { id: nextId++, p1_id: targetParent.id, p2_id: null, children_ids: [child.id], twinGroups: [], status: 'unmarried' };
-                                relationships.push(newRel);
-                                showToast(`${child.name} vinculado/a a ${targetParent.name}.`);
-                                reorderAndPositionSiblings(newRel);
-                             }
-                        }
-                        resetAction();
-                    }
-                    draw(); return;
-                case 'markingTwins':
-                     if (targetPerson) {
-                        selectionBuffer.push(targetPerson);
-                        if (selectionBuffer.length === 1) showToast(`Selecciona al segundo ${twinMarkingType === 'identical' ? 'gemelo' : 'mellizo'}.`);
-                        else if (selectionBuffer.length === 2) {
-                            const [p1, p2] = selectionBuffer;
-                            const parentRel = relationships.find(r => r.children_ids.includes(p1.id) && r.children_ids.includes(p2.id));
-                            if (parentRel) { 
-                                const isAlreadyTwin = parentRel.twinGroups.some(g => g.ids.includes(p1.id) || g.ids.includes(p2.id));
-                                if (!isAlreadyTwin) {
-                                    saveState();
-                                    parentRel.twinGroups.push({ ids: [p1.id, p2.id], type: twinMarkingType }); showToast('Vínculo creado.'); 
-                                } else { 
-                                    showToast('Una de estas personas ya está en un grupo de gemelos.'); 
-                                }
-                            } else { 
-                                showToast('No se encontró una relación parental común.'); 
-                            }
-                            resetAction();
-                        }
-                    } draw(); return;
+                case 'parentalLink': if (targetPerson) { selectionBuffer.push(targetPerson); if (selectionBuffer.length === 1) showToast('Selecciona a la segunda persona.'); else if (selectionBuffer.length === 2) { saveState(); relationships.push({ id: nextId++, p1_id: selectionBuffer[0].id, p2_id: selectionBuffer[1].id, children_ids: [], twinGroups: [], status: 'married'}); resetAction(); showToast('Vínculo creado.'); } } draw(); return;
+                case 'humanRelation': if (targetPerson) { selectionBuffer.push(targetPerson); if (selectionBuffer.length === 1) showToast('Selecciona a la segunda persona.'); else if (selectionBuffer.length === 2) { saveState(); humanRelations.push({ id: nextId++, p1_id: selectionBuffer[0].id, p2_id: selectionBuffer[1].id, type: 'cercana'}); resetAction(); showToast('Relación creada.'); } } draw(); return;
+                case 'addingChild': if (selectionBuffer.length === 0 && targetPerson) { selectionBuffer.push(targetPerson); showToast('Ahora, haz clic en un padre/madre o en un vínculo de pareja.'); draw(); return; } if (selectionBuffer.length === 1) { const child = selectionBuffer[0]; const targetParent = targetPerson; const targetRel = getRelationshipAt(worldPos.x, worldPos.y); if (!targetParent && !targetRel) return; if (targetParent && targetParent.id === child.id) { showToast('No se puede vincular a una persona consigo misma.'); return; } saveState(); relationships.forEach(r => r.children_ids = r.children_ids.filter(id => id !== child.id)); relationships = relationships.filter(r => !(r.p2_id === null && r.children_ids.length === 0)); if (targetRel) { if(!targetRel.children_ids.includes(child.id)) { targetRel.children_ids.push(child.id); showToast(`${child.name} añadido/a como hijo/a.`); } reorderAndPositionSiblings(targetRel); } else if (targetParent) { const existingRel = relationships.find(r => r.p1_id === targetParent.id || r.p2_id === targetParent.id); if (existingRel) { if(!existingRel.children_ids.includes(child.id)) { existingRel.children_ids.push(child.id); showToast(`${child.name} añadido/a como hijo/a de ${targetParent.name}.`); } reorderAndPositionSiblings(existingRel); } else { const newRel = { id: nextId++, p1_id: targetParent.id, p2_id: null, children_ids: [child.id], twinGroups: [], status: 'unmarried' }; relationships.push(newRel); showToast(`${child.name} vinculado/a a ${targetParent.name}.`); reorderAndPositionSiblings(newRel); } } resetAction(); } draw(); return;
+                case 'markingTwins': if (targetPerson) { selectionBuffer.push(targetPerson); if (selectionBuffer.length === 1) showToast(`Selecciona al segundo ${twinMarkingType === 'identical' ? 'gemelo' : 'mellizo'}.`); else if (selectionBuffer.length === 2) { const [p1, p2] = selectionBuffer; const parentRel = relationships.find(r => r.children_ids.includes(p1.id) && r.children_ids.includes(p2.id)); if (parentRel) { const isAlreadyTwin = parentRel.twinGroups.some(g => g.ids.includes(p1.id) || g.ids.includes(p2.id)); if (!isAlreadyTwin) { saveState(); parentRel.twinGroups.push({ ids: [p1.id, p2.id], type: twinMarkingType }); showToast('Vínculo creado.'); } else { showToast('Una de estas personas ya está en un grupo de gemelos.'); } } else { showToast('No se encontró una relación parental común.'); } resetAction(); } } draw(); return;
                 default:
                     if (targetPerson) {
-                        if (e.shiftKey) {
-                            // Lógica estándar de multiselección
-                            if (multiSelection.includes(targetPerson)) {
-                                multiSelection = multiSelection.filter(p => p.id !== targetPerson.id);
-                            } else {
-                                multiSelection.push(targetPerson);
-                            }
+                        if (isShift) {
+                            if (multiSelection.includes(targetPerson)) { multiSelection = multiSelection.filter(p => p.id !== targetPerson.id); } 
+                            else { multiSelection.push(targetPerson); }
                         } else {
                             if (!multiSelection.includes(targetPerson) || multiSelection.length > 1) {
                                 multiSelection = [targetPerson];
@@ -1258,74 +1051,135 @@
                         }
                         selectedRelationship = null; selectedHumanRelation = null; selectedCohabitation = null;
                         isDragging = true; dragOffsetX = worldPos.x; dragOffsetY = worldPos.y;
-                    } else if (targetRel) { 
-                        selectRelationship(targetRel);
-                    } else if (targetHumanRelation) { 
-                        selectHumanRelation(targetHumanRelation);
-                    } else if (targetCohabitation) { 
-                        selectCohabitation(targetCohabitation);
-                    } else {
-                        isSelecting = true; selectionRect = {x: worldPos.x, y: worldPos.y, w: 0, h: 0};
-                        deselectAll();
-                    }
+                    } else if (targetRel) { selectRelationship(targetRel); } 
+                    else if (targetHumanRelation) { selectHumanRelation(targetHumanRelation); } 
+                    else if (targetCohabitation) { selectCohabitation(targetCohabitation); } 
+                    else { isSelecting = true; selectionRect = {x: worldPos.x, y: worldPos.y, w: 0, h: 0}; deselectAll(); }
             }
             updatePropertiesPanel();
             draw();
-        });
+        }
 
+        // --- Mouse Events ---
+        canvas.addEventListener('mousedown', (e) => {
+            const mousePos = getMousePos(e);
+            if (e.button === 1 || e.button === 2) { isPanning = true; panStartX = mousePos.x; panStartY = mousePos.y; canvas.style.cursor = 'grabbing'; e.preventDefault(); return; }
+            handlePointerDown(screenToWorld(mousePos.x, mousePos.y), e.shiftKey);
+        });
         canvas.addEventListener('mousemove', (e) => {
             const mousePos = getMousePos(e);
-            if(isPanning) {
-                const dx = mousePos.x - panStartX, dy = mousePos.y - panStartY;
-                panX += dx; panY += dy;
-                panStartX = mousePos.x; panStartY = mousePos.y;
-                draw(); return;
-            }
+            if(isPanning) { const dx = mousePos.x - panStartX, dy = mousePos.y - panStartY; panX += dx; panY += dy; panStartX = mousePos.x; panStartY = mousePos.y; draw(); return; }
             const worldPos = screenToWorld(mousePos.x, mousePos.y);
-            if (isDragging && multiSelection.length > 0) {
-                const dx = worldPos.x - dragOffsetX, dy = worldPos.y - dragOffsetY;
-                multiSelection.forEach(p => { p.x += dx; p.y += dy; });
-                dragOffsetX = worldPos.x; dragOffsetY = worldPos.y;
-                draw();
-            } else if (isSelecting) {
-                selectionRect.w = worldPos.x - selectionRect.x;
-                selectionRect.h = worldPos.y - selectionRect.y;
-                draw();
-            }
+            if (isDragging && multiSelection.length > 0) { const dx = worldPos.x - dragOffsetX, dy = worldPos.y - dragOffsetY; multiSelection.forEach(p => { p.x += dx; p.y += dy; }); dragOffsetX = worldPos.x; dragOffsetY = worldPos.y; draw(); } 
+            else if (isSelecting) { selectionRect.w = worldPos.x - selectionRect.x; selectionRect.h = worldPos.y - selectionRect.y; draw(); }
             canvas.style.cursor = (getPersonAt(worldPos.x, worldPos.y) || getRelationshipAt(worldPos.x, worldPos.y) || getCohabitationAt(worldPos.x, worldPos.y) || getHumanRelationAt(worldPos.x, worldPos.y) || currentAction !== 'select') ? 'pointer' : 'default';
         });
-
         canvas.addEventListener('mouseup', (e) => {
             if(isDragging) saveState();
             if(isPanning) { isPanning = false; canvas.style.cursor = 'default'; }
-            if(isSelecting) {
-                isSelecting = false;
-                const sx = Math.min(selectionRect.x, selectionRect.x + selectionRect.w);
-                const sy = Math.min(selectionRect.y, selectionRect.y + selectionRect.h);
-                const ex = Math.max(selectionRect.x, selectionRect.x + selectionRect.w);
-                const ey = Math.max(selectionRect.y, selectionRect.y + selectionRect.h);
-                multiSelection = people.filter(p => p.x > sx && p.x < ex && p.y > sy && p.y < ey);
-                updatePropertiesPanel(); draw();
-            }
+            if(isSelecting) { isSelecting = false; const sx = Math.min(selectionRect.x, selectionRect.x + selectionRect.w); const sy = Math.min(selectionRect.y, selectionRect.y + selectionRect.h); const ex = Math.max(selectionRect.x, selectionRect.x + selectionRect.w); const ey = Math.max(selectionRect.y, selectionRect.y + selectionRect.h); multiSelection = people.filter(p => p.x > sx && p.x < ex && p.y > sy && p.y < ey); updatePropertiesPanel(); draw(); }
             isDragging = false;
         });
-
-        canvas.addEventListener('wheel', e => {
-            e.preventDefault();
-            const mousePos = getMousePos(e);
-            const worldPosBeforeZoom = screenToWorld(mousePos.x, mousePos.y);
-            scale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1;
-            scale = Math.max(0.1, Math.min(5, scale));
-            const worldPosAfterZoom = screenToWorld(mousePos.x, mousePos.y);
-            panX += (worldPosAfterZoom.x - worldPosBeforeZoom.x) * scale;
-            panY += (worldPosAfterZoom.y - worldPosBeforeZoom.y) * scale;
-            draw();
-        });
-
+        canvas.addEventListener('wheel', e => { e.preventDefault(); const mousePos = getMousePos(e); const worldPosBeforeZoom = screenToWorld(mousePos.x, mousePos.y); scale = e.deltaY < 0 ? scale * 1.1 : scale / 1.1; scale = Math.max(0.1, Math.min(5, scale)); const worldPosAfterZoom = screenToWorld(mousePos.x, mousePos.y); panX += (worldPosAfterZoom.x - worldPosBeforeZoom.x) * scale; panY += (worldPosAfterZoom.y - worldPosBeforeZoom.y) * scale; draw(); });
         canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+        // --- Touch Events ---
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            clearTimeout(longPressTimeout);
+            isTouchDragging = false;
 
-        // --- Import/Export ---
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const touchPos = getTouchPos(touch);
+                lastTouch = touchPos;
+                const worldPos = screenToWorld(touchPos.x, touchPos.y);
+                const targetPerson = getPersonAt(worldPos.x, worldPos.y);
+
+                if (targetPerson && currentAction === 'select') {
+                    // Iniciar temporizador para "mantener presionado"
+                    longPressTimeout = setTimeout(() => {
+                        isTouchDragging = true;
+                        isPanning = false; // Asegurarse de no hacer pan
+                        if (!multiSelection.includes(targetPerson)) {
+                            multiSelection = [targetPerson];
+                        }
+                        dragOffsetX = worldPos.x;
+                        dragOffsetY = worldPos.y;
+                        showToast('Arrastrando miembro...');
+                        draw();
+                    }, 500); // 500ms para mantener presionado
+                } else {
+                     isPanning = true;
+                }
+
+            } else if (e.touches.length === 2) {
+                isPanning = false;
+                initialPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            }
+        });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            clearTimeout(longPressTimeout);
+
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const touchPos = getTouchPos(touch);
+                const worldPos = screenToWorld(touchPos.x, touchPos.y);
+
+                if (isTouchDragging) {
+                     const dx = worldPos.x - dragOffsetX;
+                     const dy = worldPos.y - dragOffsetY;
+                     multiSelection.forEach(p => { p.x += dx; p.y += dy; });
+                     dragOffsetX = worldPos.x;
+                     dragOffsetY = worldPos.y;
+                } else if (isPanning) {
+                    const dx = touchPos.x - lastTouch.x;
+                    const dy = touchPos.y - lastTouch.y;
+                    panX += dx;
+                    panY += dy;
+                }
+                lastTouch = touchPos;
+
+            } else if (e.touches.length === 2) {
+                const newPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                const pinchRatio = newPinchDistance / initialPinchDistance;
+                
+                const touch1 = getTouchPos(e.touches[0]);
+                const touch2 = getTouchPos(e.touches[1]);
+                const midPointScreen = { x: (touch1.x + touch2.x) / 2, y: (touch1.y + touch2.y) / 2 };
+                const worldPosBeforeZoom = screenToWorld(midPointScreen.x, midPointScreen.y);
+
+                scale *= pinchRatio;
+                scale = Math.max(0.1, Math.min(5, scale));
+
+                const worldPosAfterZoom = screenToWorld(midPointScreen.x, midPointScreen.y);
+                panX += (worldPosAfterZoom.x - worldPosBeforeZoom.x) * scale;
+                panY += (worldPosAfterZoom.y - worldPosBeforeZoom.y) * scale;
+                
+                initialPinchDistance = newPinchDistance;
+            }
+            draw();
+        });
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            clearTimeout(longPressTimeout);
+            
+            // Si no hubo movimiento, es un toque (tap)
+            if (!isPanning && !isTouchDragging && e.changedTouches.length === 1) {
+                 const touchPos = getTouchPos(e.changedTouches[0]);
+                 handlePointerDown(screenToWorld(touchPos.x, touchPos.y), false); // Shift=false para toques
+            }
+
+            if(isTouchDragging) saveState();
+
+            isPanning = false;
+            isTouchDragging = false;
+            initialPinchDistance = null;
+        });
+
+        // --- Import/Export (sin cambios) ---
+        // ... (el mismo código de import/export de antes) ...
         saveBtn.addEventListener('click', () => {
             const data = { people, relationships, humanRelations, cohabitations, nextId };
             const json = JSON.stringify(data, null, 2);
@@ -1335,7 +1189,6 @@
             a.href = url; a.download = 'genograma.json'; a.click();
             URL.revokeObjectURL(url);
         });
-
         importBtn.addEventListener('click', () => importFile.click());
         importFile.addEventListener('change', e => {
             const file = e.target.files[0]; if (!file) return;
@@ -1351,94 +1204,6 @@
             };
             reader.readText(file);
         });
-        
-        function drawLegendToCanvas(legendCtx, width) {
-            const PADDING = 25; const ITEM_HEIGHT = 28; const TITLE_FONT = 'bold 16px Inter';
-            const FONT = '14px Inter'; const SECTION_GAP = 40;
-        
-            legendCtx.fillStyle = '#ffffff'; legendCtx.fillRect(0, 0, width, 2000);
-        
-            const sections = [];
-            const symbolsSection = { title: 'Símbolos', items: [] };
-            symbolsSection.items.push({ label: 'Hombre', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.fillRect(lx, ly - 10, 20, 20); legendCtx.strokeRect(lx, ly - 10, 20, 20); }});
-            symbolsSection.items.push({ label: 'Mujer', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.beginPath(); legendCtx.arc(lx + 10, ly, 10, 0, Math.PI * 2); legendCtx.fill(); legendCtx.stroke(); }});
-            symbolsSection.items.push({ label: 'Mascota', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.beginPath(); legendCtx.moveTo(lx + 10, ly - 10); legendCtx.lineTo(lx + 20, ly); legendCtx.lineTo(lx + 10, ly + 10); legendCtx.lineTo(lx, ly); legendCtx.closePath(); legendCtx.fill(); legendCtx.stroke(); }});
-            symbolsSection.items.push({ label: 'Embarazo', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; const r = 10; legendCtx.beginPath(); legendCtx.moveTo(lx+r, ly-r); legendCtx.lineTo(lx+r*2, ly+r); legendCtx.lineTo(lx, ly+r); legendCtx.closePath(); legendCtx.fill(); legendCtx.stroke(); }});
-            symbolsSection.items.push({ label: 'Pérdida', draw: (lx, ly) => { legendCtx.fillStyle = '#4b5563'; legendCtx.beginPath(); legendCtx.arc(lx + 10, ly, 7, 0, Math.PI*2); legendCtx.fill(); }});
-            symbolsSection.items.push({ label: 'Aborto', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; const r=7; legendCtx.beginPath(); legendCtx.moveTo(lx+10-r, ly-r); legendCtx.lineTo(lx+10+r, ly+r); legendCtx.moveTo(lx+10+r, ly-r); legendCtx.lineTo(lx+10-r, ly+r); legendCtx.stroke(); }});
-            symbolsSection.items.push({ label: 'Paciente Índice', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.strokeRect(lx, ly-10, 20, 20); legendCtx.strokeRect(lx-3, ly-13, 26, 26); }});
-            symbolsSection.items.push({ label: 'Fallecido', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.strokeRect(lx, ly-10, 20, 20); legendCtx.beginPath(); legendCtx.moveTo(lx+4, ly-6); legendCtx.lineTo(lx+16, ly+6); legendCtx.moveTo(lx+16, ly-6); legendCtx.lineTo(lx+4, ly+6); legendCtx.stroke(); }});
-            sections.push(symbolsSection);
-        
-            const linksSection = { title: 'Vínculos de Pareja', items: [] };
-            linksSection.items.push({ label: 'Casados', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); }});
-            linksSection.items.push({ label: 'No casados', draw: (lx, ly) => { legendCtx.setLineDash([5, 3]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.setLineDash([]); }});
-            linksSection.items.push({ label: 'Separados', draw: (lx, ly) => { legendCtx.strokeStyle = '#ef4444'; legendCtx.lineWidth = 2; legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+15, ly-5); legendCtx.lineTo(lx+25, ly+5); legendCtx.stroke(); }});
-            linksSection.items.push({ label: 'Divorciados', draw: (lx, ly) => { legendCtx.strokeStyle = '#ef4444'; legendCtx.lineWidth = 2; legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+15, ly-5); legendCtx.lineTo(lx+25, ly+5); legendCtx.moveTo(lx+25, ly-5); legendCtx.lineTo(lx+15, ly+5);legendCtx.stroke(); }});
-            sections.push(linksSection);
-
-            const relationsSection = { title: 'Relaciones', items: [] };
-            relationsSection.items.push({ label: 'Cercana', draw: (lx, ly) => { legendCtx.strokeStyle = '#10b981'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly-2); legendCtx.lineTo(lx+40, ly-2); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly+2); legendCtx.lineTo(lx+40, ly+2); legendCtx.stroke(); }});
-            relationsSection.items.push({ label: 'Estrecha', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly - 4); legendCtx.lineTo(lx + 40, ly - 4); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx + 40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly + 4); legendCtx.lineTo(lx + 40, ly + 4); legendCtx.stroke(); }});
-            relationsSection.items.push({ label: 'Conflictiva', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); for(let i=0; i<40; i+=10) { legendCtx.lineTo(lx+i+5, ly + (i%20===0 ? -5:5)); } legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); }});
-            relationsSection.items.push({ label: 'Distante', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([2, 4]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.setLineDash([]); }});
-            relationsSection.items.push({ label: 'Rota', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+15, ly); legendCtx.moveTo(lx+25, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+18, ly-5); legendCtx.lineTo(lx+18, ly+5); legendCtx.moveTo(lx+22, ly-5); legendCtx.lineTo(lx+22, ly+5); legendCtx.stroke(); }});
-            relationsSection.items.push({ label: 'Abuso', draw: (lx, ly) => {
-                legendCtx.strokeStyle = '#3b82f6'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]);
-                legendCtx.beginPath(); legendCtx.moveTo(lx, ly);
-                for(let i=0; i<30; i+=10) { legendCtx.lineTo(lx+i+5, ly + (i%20===0 ? -5:5)); }
-                legendCtx.lineTo(lx+30, ly); legendCtx.stroke();
-                const arrowSize = 8;
-                legendCtx.beginPath(); legendCtx.moveTo(lx + 40, ly);
-                legendCtx.lineTo(lx + 40 - arrowSize, ly - arrowSize / 2);
-                legendCtx.moveTo(lx + 40, ly);
-                legendCtx.lineTo(lx + 40 - arrowSize, ly + arrowSize / 2); legendCtx.stroke();
-            }});
-            sections.push(relationsSection);
-
-            const illnessesSection = { title: 'Patologías', items: [], twoColumns: true };
-            Object.keys(ILLNESSES).forEach(key => { illnessesSection.items.push({ label: ILLNESSES[key].label, draw: (lx, ly) => { legendCtx.fillStyle = ILLNESSES[key].color; legendCtx.fillRect(lx, ly - 8, 16, 16); }}); });
-            sections.push(illnessesSection);
-        
-            let currentX = PADDING; legendCtx.font = FONT;
-            sections.forEach(section => {
-                const titleWidth = legendCtx.measureText(section.title).width;
-                const itemsWidth = section.items.map(item => legendCtx.measureText(item.label).width);
-                let maxWidth = Math.max(titleWidth, ...itemsWidth);
-                if (section.twoColumns) {
-                    const half = Math.ceil(itemsWidth.length / 2);
-                    const col1W = Math.max(...itemsWidth.slice(0, half));
-                    const col2W = itemsWidth.length > half ? Math.max(...itemsWidth.slice(half)) : 0;
-                    maxWidth = col1W + col2W + 75; 
-                } else { maxWidth += 60; }
-                section.width = maxWidth; section.startX = currentX; currentX += maxWidth + SECTION_GAP;
-            });
-        
-            let totalHeight = 0;
-            sections.forEach(section => {
-                let currentY = PADDING;
-                legendCtx.font = TITLE_FONT; legendCtx.fillStyle = '#1f2937';
-                legendCtx.textAlign = 'left'; legendCtx.textBaseline = 'top';
-                legendCtx.fillText(section.title, section.startX, currentY);
-                currentY += ITEM_HEIGHT * 1.5;
-        
-                legendCtx.font = FONT;
-                if (section.twoColumns) {
-                    const half = Math.ceil(section.items.length / 2);
-                    const col1Items = section.items.slice(0, half), col2Items = section.items.slice(half);
-                    const col1Width = Math.max(...col1Items.map(item => legendCtx.measureText(item.label).width)) + 50;
-                    let y1 = currentY, y2 = currentY;
-                    col1Items.forEach(item => { item.draw(section.startX, y1 + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + 25, y1 + ITEM_HEIGHT / 2); y1 += ITEM_HEIGHT; });
-                    col2Items.forEach(item => { item.draw(section.startX + col1Width, y2 + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + col1Width + 25, y2 + ITEM_HEIGHT / 2); y2 += ITEM_HEIGHT; });
-                    currentY = Math.max(y1, y2);
-                } else {
-                    section.items.forEach(item => { item.draw(section.startX, currentY + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + 50, currentY + ITEM_HEIGHT / 2); currentY += ITEM_HEIGHT; });
-                }
-                totalHeight = Math.max(totalHeight, currentY);
-            });
-            return totalHeight + PADDING;
-        }
-
         async function exportWithLegend(format) {
             const legendCanvas = document.createElement('canvas');
             const legendCtx = legendCanvas.getContext('2d');
@@ -1472,7 +1237,84 @@
                 pdf.save('genograma-con-leyenda.pdf');
             }
         }
-        
+        function drawLegendToCanvas(legendCtx, width) {
+            const PADDING = 25; const ITEM_HEIGHT = 28; const TITLE_FONT = 'bold 16px Inter';
+            const FONT = '14px Inter'; const SECTION_GAP = 40;
+            legendCtx.fillStyle = '#ffffff'; legendCtx.fillRect(0, 0, width, 2000);
+            const sections = [];
+            const symbolsSection = { title: 'Símbolos', items: [] };
+            symbolsSection.items.push({ label: 'Hombre', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.fillRect(lx, ly - 10, 20, 20); legendCtx.strokeRect(lx, ly - 10, 20, 20); }});
+            symbolsSection.items.push({ label: 'Mujer', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.beginPath(); legendCtx.arc(lx + 10, ly, 10, 0, Math.PI * 2); legendCtx.fill(); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Mascota', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; legendCtx.beginPath(); legendCtx.moveTo(lx + 10, ly - 10); legendCtx.lineTo(lx + 20, ly); legendCtx.lineTo(lx + 10, ly + 10); legendCtx.lineTo(lx, ly); legendCtx.closePath(); legendCtx.fill(); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Embarazo', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.fillStyle = '#f9fafb'; const r = 10; legendCtx.beginPath(); legendCtx.moveTo(lx+r, ly-r); legendCtx.lineTo(lx+r*2, ly+r); legendCtx.lineTo(lx, ly+r); legendCtx.closePath(); legendCtx.fill(); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Pérdida', draw: (lx, ly) => { legendCtx.fillStyle = '#4b5563'; legendCtx.beginPath(); legendCtx.arc(lx + 10, ly, 7, 0, Math.PI*2); legendCtx.fill(); }});
+            symbolsSection.items.push({ label: 'Aborto', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; const r=7; legendCtx.beginPath(); legendCtx.moveTo(lx+10-r, ly-r); legendCtx.lineTo(lx+10+r, ly+r); legendCtx.moveTo(lx+10+r, ly-r); legendCtx.lineTo(lx+10-r, ly+r); legendCtx.stroke(); }});
+            symbolsSection.items.push({ label: 'Paciente Índice', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.strokeRect(lx, ly-10, 20, 20); legendCtx.strokeRect(lx-3, ly-13, 26, 26); }});
+            symbolsSection.items.push({ label: 'Fallecido', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.strokeRect(lx, ly-10, 20, 20); legendCtx.beginPath(); legendCtx.moveTo(lx+4, ly-6); legendCtx.lineTo(lx+16, ly+6); legendCtx.moveTo(lx+16, ly-6); legendCtx.lineTo(lx+4, ly+6); legendCtx.stroke(); }});
+            sections.push(symbolsSection);
+            const linksSection = { title: 'Vínculos de Pareja', items: [] };
+            linksSection.items.push({ label: 'Casados', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); }});
+            linksSection.items.push({ label: 'No casados', draw: (lx, ly) => { legendCtx.setLineDash([5, 3]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.setLineDash([]); }});
+            linksSection.items.push({ label: 'Separados', draw: (lx, ly) => { legendCtx.strokeStyle = '#ef4444'; legendCtx.lineWidth = 2; legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+15, ly-5); legendCtx.lineTo(lx+25, ly+5); legendCtx.stroke(); }});
+            linksSection.items.push({ label: 'Divorciados', draw: (lx, ly) => { legendCtx.strokeStyle = '#ef4444'; legendCtx.lineWidth = 2; legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+15, ly-5); legendCtx.lineTo(lx+25, ly+5); legendCtx.moveTo(lx+25, ly-5); legendCtx.lineTo(lx+15, ly+5);legendCtx.stroke(); }});
+            sections.push(linksSection);
+            const relationsSection = { title: 'Relaciones', items: [] };
+            relationsSection.items.push({ label: 'Cercana', draw: (lx, ly) => { legendCtx.strokeStyle = '#10b981'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly-2); legendCtx.lineTo(lx+40, ly-2); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly+2); legendCtx.lineTo(lx+40, ly+2); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Estrecha', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly - 4); legendCtx.lineTo(lx + 40, ly - 4); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx + 40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx, ly + 4); legendCtx.lineTo(lx + 40, ly + 4); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Conflictiva', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); for(let i=0; i<40; i+=10) { legendCtx.lineTo(lx+i+5, ly + (i%20===0 ? -5:5)); } legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Distante', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([2, 4]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.setLineDash([]); }});
+            relationsSection.items.push({ label: 'Rota', draw: (lx, ly) => { legendCtx.strokeStyle = '#4b5563'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]); legendCtx.beginPath(); legendCtx.moveTo(lx, ly); legendCtx.lineTo(lx+15, ly); legendCtx.moveTo(lx+25, ly); legendCtx.lineTo(lx+40, ly); legendCtx.stroke(); legendCtx.beginPath(); legendCtx.moveTo(lx+18, ly-5); legendCtx.lineTo(lx+18, ly+5); legendCtx.moveTo(lx+22, ly-5); legendCtx.lineTo(lx+22, ly+5); legendCtx.stroke(); }});
+            relationsSection.items.push({ label: 'Abuso', draw: (lx, ly) => {
+                legendCtx.strokeStyle = '#3b82f6'; legendCtx.lineWidth = 2; legendCtx.setLineDash([]);
+                legendCtx.beginPath(); legendCtx.moveTo(lx, ly);
+                for(let i=0; i<30; i+=10) { legendCtx.lineTo(lx+i+5, ly + (i%20===0 ? -5:5)); }
+                legendCtx.lineTo(lx+30, ly); legendCtx.stroke();
+                const arrowSize = 8;
+                legendCtx.beginPath(); legendCtx.moveTo(lx + 40, ly);
+                legendCtx.lineTo(lx + 40 - arrowSize, ly - arrowSize / 2);
+                legendCtx.moveTo(lx + 40, ly);
+                legendCtx.lineTo(lx + 40 - arrowSize, ly + arrowSize / 2); legendCtx.stroke();
+            }});
+            sections.push(relationsSection);
+            const illnessesSection = { title: 'Patologías', items: [], twoColumns: true };
+            Object.keys(ILLNESSES).forEach(key => { illnessesSection.items.push({ label: ILLNESSES[key].label, draw: (lx, ly) => { legendCtx.fillStyle = ILLNESSES[key].color; legendCtx.fillRect(lx, ly - 8, 16, 16); }}); });
+            sections.push(illnessesSection);
+            let currentX = PADDING; legendCtx.font = FONT;
+            sections.forEach(section => {
+                const titleWidth = legendCtx.measureText(section.title).width;
+                const itemsWidth = section.items.map(item => legendCtx.measureText(item.label).width);
+                let maxWidth = Math.max(titleWidth, ...itemsWidth);
+                if (section.twoColumns) {
+                    const half = Math.ceil(itemsWidth.length / 2);
+                    const col1W = Math.max(...itemsWidth.slice(0, half));
+                    const col2W = itemsWidth.length > half ? Math.max(...itemsWidth.slice(half)) : 0;
+                    maxWidth = col1W + col2W + 75; 
+                } else { maxWidth += 60; }
+                section.width = maxWidth; section.startX = currentX; currentX += maxWidth + SECTION_GAP;
+            });
+            let totalHeight = 0;
+            sections.forEach(section => {
+                let currentY = PADDING;
+                legendCtx.font = TITLE_FONT; legendCtx.fillStyle = '#1f2937';
+                legendCtx.textAlign = 'left'; legendCtx.textBaseline = 'top';
+                legendCtx.fillText(section.title, section.startX, currentY);
+                currentY += ITEM_HEIGHT * 1.5;
+                legendCtx.font = FONT;
+                if (section.twoColumns) {
+                    const half = Math.ceil(section.items.length / 2);
+                    const col1Items = section.items.slice(0, half), col2Items = section.items.slice(half);
+                    const col1Width = Math.max(...col1Items.map(item => legendCtx.measureText(item.label).width)) + 50;
+                    let y1 = currentY, y2 = currentY;
+                    col1Items.forEach(item => { item.draw(section.startX, y1 + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + 25, y1 + ITEM_HEIGHT / 2); y1 += ITEM_HEIGHT; });
+                    col2Items.forEach(item => { item.draw(section.startX + col1Width, y2 + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + col1Width + 25, y2 + ITEM_HEIGHT / 2); y2 += ITEM_HEIGHT; });
+                    currentY = Math.max(y1, y2);
+                } else {
+                    section.items.forEach(item => { item.draw(section.startX, currentY + ITEM_HEIGHT / 2); legendCtx.fillStyle = '#4b5563'; legendCtx.textBaseline = 'middle'; legendCtx.fillText(item.label, section.startX + 50, currentY + ITEM_HEIGHT / 2); currentY += ITEM_HEIGHT; });
+                }
+                totalHeight = Math.max(totalHeight, currentY);
+            });
+            return totalHeight + PADDING;
+        }
         exportPngBtn.addEventListener('click', () => exportWithLegend('png'));
         exportPdfBtn.addEventListener('click', () => exportWithLegend('pdf'));
 
